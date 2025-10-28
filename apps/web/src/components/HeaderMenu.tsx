@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 type Props = {
   columnId: string;
@@ -22,16 +22,33 @@ type Props = {
 export const HeaderMenu: React.FC<Props> = ({ columnId, index, disabled, disableHide, disableDelete, onEditField, onFreezeTo, onHideField, onSortAsc, onSortDesc, onDeleteField, onFillColorColumn, onInsertLeft, onInsertRight, onDuplicateField }) => {
   const [open, setOpen] = useState(false);
   const [colorOpen, setColorOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const colors = ['#fffce8', '#e6fffa', '#eef2ff', '#fef9c3', '#fee2e2', '#dcfce7', '#e0f2fe'];
+
+  // 当菜单打开后，监听全局鼠标移动；一旦鼠标移出触发器+下拉菜单容器区域则自动关闭
+  useEffect(() => {
+    if (!open) return;
+    const onMouseMove = (e: MouseEvent) => {
+      const root = rootRef.current;
+      const target = e.target as Node | null;
+      if (!root) return;
+      if (target && root.contains(target)) return; // 仍在容器内（包含触发器与下拉菜单）
+      setOpen(false);
+      setColorOpen(false);
+    };
+    window.addEventListener('mousemove', onMouseMove, { passive: true });
+    return () => window.removeEventListener('mousemove', onMouseMove);
+  }, [open]);
+
   return (
-    <div style={{ position: 'relative', display: 'inline-block' }}>
+    <div ref={rootRef} style={{ position: 'relative', display: 'inline-block' }}>
       <span
         role="button"
         onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
         style={{ marginLeft: 6, cursor: disabled ? 'not-allowed' : 'pointer', color: disabled ? '#bbb' : '#666' }}
       >▾</span>
       {open && !disabled && (
-        <div style={{ position: 'absolute', top: '120%', right: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', boxShadow: 'var(--shadow)', minWidth: 220, zIndex: 60 }}>
+        <div style={{ position: 'absolute', top: '100%', right: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', boxShadow: 'var(--shadow)', minWidth: 220, zIndex: 60 }}>
           <div style={{ padding: 'var(--spacing)', cursor: 'pointer' }} onClick={() => { onEditField?.(columnId); setOpen(false); }}>编辑字段</div>
           <div style={{ padding: 'var(--spacing)', cursor: 'pointer' }} onClick={() => { onEditField?.(columnId); setOpen(false); }}>编辑描述</div>
           <div style={{ padding: 'var(--spacing)', cursor: 'pointer', position: 'relative' }} onClick={() => setColorOpen(!colorOpen)}>

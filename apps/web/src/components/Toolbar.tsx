@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef } from 'react'
 
 type ColumnItem = { id: string; name: string; type: string };
 
@@ -21,19 +21,55 @@ type Props = {
 };
 
 export const Toolbar: React.FC<Props> = ({ columns, onColumnsChange, rowHeight, onRowHeightChange, onFilterOpen, onColorOpen, onGroupOpen, onSortOpen, onShowAllHidden, onAddRecord, onImport, onExport, columnVisibility, onToggleFieldVisibility }) => {
-  const [fieldOpen, setFieldOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<ColumnItem | null>(null);
-  const [editName, setEditName] = useState('');
-  const [editType, setEditType] = useState('text');
-  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [fieldOpen, setFieldOpen] = useState(false)
+  const [rowHeightOpen, setRowHeightOpen] = useState(false)
+  const [editTarget, setEditTarget] = useState<ColumnItem | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editType, setEditType] = useState('text')
+  const fileRef = useRef<HTMLInputElement | null>(null)
+  const rowHeightRef = useRef<HTMLDivElement | null>(null)
+  const closeTimerRef = useRef<number | null>(null)
+  const fieldCloseTimerRef = useRef<number | null>(null)
 
-  const typeOptions = useMemo(() => ['text', 'single', 'multi', 'user', 'number', 'date', 'attachment', 'formula', 'creator', 'modifier', 'created_at', 'updated_at'], []);
+  const typeOptions = useMemo(() => ['text', 'single', 'multi', 'user', 'number', 'date', 'attachment', 'formula', 'creator', 'modifier', 'created_at', 'updated_at'], [])
 
   const applyEdit = () => {
-    if (!editTarget) return;
-    onColumnsChange(columns.map(c => c.id === editTarget.id ? { ...c, name: editName, type: editType } : c));
-    setEditTarget(null);
-  };
+    if (!editTarget) return
+    onColumnsChange(columns.map(c => c.id === editTarget.id ? { ...c, name: editName, type: editType } : c))
+    setEditTarget(null)
+  }
+
+  const cancelClose = () => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current)
+      closeTimerRef.current = null
+    }
+  }
+
+  const scheduleClose = () => {
+    cancelClose()
+    closeTimerRef.current = window.setTimeout(() => {
+      setRowHeightOpen(false)
+      closeTimerRef.current = null
+    }, 150)
+  }
+
+  const cancelFieldClose = () => {
+    if (fieldCloseTimerRef.current) {
+      clearTimeout(fieldCloseTimerRef.current)
+      fieldCloseTimerRef.current = null
+    }
+  }
+
+  const scheduleFieldClose = () => {
+    cancelFieldClose()
+    fieldCloseTimerRef.current = window.setTimeout(() => {
+      setFieldOpen(false)
+      fieldCloseTimerRef.current = null
+    }, 150)
+  }
+
+
 
   return (
     <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '8px 0' }}>
@@ -71,10 +107,10 @@ export const Toolbar: React.FC<Props> = ({ columns, onColumnsChange, rowHeight, 
 
       <button onClick={onAddRecord}>添加记录</button>
 
-      <div style={{ position: 'relative' }}>
-        <button onClick={() => setFieldOpen(!fieldOpen)}>字段配置 ▾</button>
+      <div style={{ position: 'relative' }} onMouseEnter={cancelFieldClose} onMouseLeave={scheduleFieldClose}>
+        <button onClick={() => { cancelFieldClose(); setFieldOpen(!fieldOpen) }}>字段配置 ▾</button>
         {fieldOpen && (
-          <div style={{ position: 'absolute', top: '110%', left: 0, background: '#fff', border: '1px solid #ddd', borderRadius: 'var(--radius)', minWidth: 260, zIndex: 30, boxShadow: 'var(--shadow)' }}>
+          <div style={{ position: 'absolute', top: '100%', left: 0, background: '#fff', border: '1px solid #ddd', borderRadius: 'var(--radius)', minWidth: 260, zIndex: 60, boxShadow: 'var(--shadow)' }}>
             {columns.map((c) => {
               const isVisible = (columnVisibility?.[c.id] !== false);
               return (
@@ -120,15 +156,22 @@ export const Toolbar: React.FC<Props> = ({ columns, onColumnsChange, rowHeight, 
       <button onClick={() => onGroupOpen && onGroupOpen()}>分组</button>
       <button onClick={() => onSortOpen && onSortOpen()}>排序</button>
 
-      <div style={{ position: 'relative' }}>
-        <button onClick={() => { /* toggle */ }}>行高 ▾</button>
-        <div style={{ position: 'absolute', top: '110%', left: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', boxShadow: 'var(--shadow)' }}>
-          {(['low','medium','high','xhigh'] as const).map(h => (
-            <div key={h} style={{ padding: 'var(--spacing)', cursor: 'pointer', fontWeight: rowHeight === h ? 700 : 400 }} onClick={() => onRowHeightChange(h)}>
-              {h}
-            </div>
-          ))}
-        </div>
+      <div
+        ref={rowHeightRef}
+        style={{ position: 'relative' }}
+        onMouseEnter={cancelClose}
+        onMouseLeave={scheduleClose}
+      >
+        <button onClick={() => { cancelClose(); setRowHeightOpen(!rowHeightOpen) }}>行高 ▾</button>
+        {rowHeightOpen && (
+          <div style={{ position: 'absolute', top: '100%', left: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', boxShadow: 'var(--shadow)', zIndex: 60 }}>
+            {(['low','medium','high','xhigh'] as const).map(h => (
+              <div key={h} style={{ padding: 'var(--spacing)', cursor: 'pointer', fontWeight: rowHeight === h ? 700 : 400 }} onClick={() => { onRowHeightChange(h); cancelClose(); setRowHeightOpen(false); }}>
+                {h}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <button onClick={onColorOpen}>填色</button>
@@ -141,7 +184,7 @@ export const Toolbar: React.FC<Props> = ({ columns, onColumnsChange, rowHeight, 
         <span title="评论">💬</span>
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default Toolbar;
+export default Toolbar

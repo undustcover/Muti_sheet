@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { IconPlus, IconTask, IconTable, IconMore, IconChevronDown, IconChevronRight, IconCollect, IconDashboard, IconFolder } from './Icons';
 
 type Props = {
@@ -44,25 +44,98 @@ const Row: React.FC<{ label: React.ReactNode; active?: boolean; onClick?: () => 
       color: active ? 'var(--color-primary)' : '#202020',
       margin: '2px var(--spacing)',
       display: 'flex',
-      alignItems: 'center',
+      alignItems: 'flex-start',
       justifyContent: 'space-between'
     }}
   >
-    <span>{label}</span>
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--spacing)' }}>{trailing}</span>
+    <div style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere', wordBreak: 'break-word', lineHeight: 1.4 }}>{label}</div>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--spacing)', flex: 'none' }}>{trailing}</span>
   </div>
 );
 
 const Menu: React.FC<{ items: { label: string; onClick: () => void; danger?: boolean }[] }>
   = ({ items }) => {
   const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState<'bottom' | 'top'>('bottom');
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const closeTimerRef = useRef<number | null>(null);
+
+  const cancelClose = () => {
+    if (closeTimerRef.current !== null) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  };
+  const scheduleClose = () => {
+    cancelClose();
+    closeTimerRef.current = window.setTimeout(() => setOpen(false), 150);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const calc = () => {
+      const triggerEl = wrapperRef.current;
+      const popEl = menuRef.current;
+      if (!triggerEl || !popEl) return;
+      const rect = triggerEl.getBoundingClientRect();
+      const menuHeight = popEl.offsetHeight;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const shouldFlipToTop = spaceBelow < menuHeight + 8 && spaceAbove > spaceBelow;
+      setPlacement(shouldFlipToTop ? 'top' : 'bottom');
+    };
+    const raf = requestAnimationFrame(calc);
+    window.addEventListener('resize', calc);
+    window.addEventListener('scroll', calc, true);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', calc);
+      window.removeEventListener('scroll', calc, true);
+    };
+  }, [open]);
+
   return (
-    <div style={{ position: 'relative', display: 'inline-block' }} onClick={(e) => e.stopPropagation()}>
-      <span role="button" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }} onClick={() => setOpen(!open)}><IconMore /></span>
+    <div
+      ref={wrapperRef}
+      style={{ position: 'relative', display: 'inline-block' }}
+      onClick={(e) => e.stopPropagation()}
+      onMouseEnter={cancelClose}
+      onMouseLeave={scheduleClose}
+    >
+      <span
+        role="button"
+        style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}
+        onClick={() => { cancelClose(); setOpen(!open); }}
+      >
+        <IconMore />
+      </span>
       {open && (
-        <div style={{ position: 'absolute', top: '120%', right: 0, background: '#fff', border: '1px solid #ddd', borderRadius: 'var(--radius)', boxShadow: 'var(--shadow)', minWidth: 160, zIndex: 60 }}>
+        <div
+          ref={menuRef}
+          style={{
+            position: 'absolute',
+            top: placement === 'bottom' ? '100%' : 'auto',
+            bottom: placement === 'top' ? '100%' : 'auto',
+            right: 0,
+            marginTop: placement === 'bottom' ? 6 : 0,
+            marginBottom: placement === 'top' ? 6 : 0,
+            background: '#fff',
+            border: '1px solid #ddd',
+            borderRadius: 'var(--radius)',
+            boxShadow: 'var(--shadow)',
+            minWidth: 160,
+            zIndex: 60
+          }}
+        >
           {items.map((it, idx) => (
-            <div key={idx} style={{ padding: 'var(--spacing)', cursor: 'pointer', color: it.danger ? '#c00' : undefined }} onClick={() => { it.onClick(); setOpen(false); }}>{it.label}</div>
+            <div
+              key={idx}
+              style={{ padding: 'var(--spacing)', cursor: 'pointer', color: it.danger ? '#c00' : undefined }}
+              onClick={() => { cancelClose(); it.onClick(); setOpen(false); }}
+            >
+              {it.label}
+            </div>
           ))}
         </div>
       )}
@@ -296,7 +369,7 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate }) => {
 
   // 在 Sidebar 组件内部已有状态与函数后，渲染最底部增加 Modal UI（依赖 compose* 状态）
   return (
-    <div style={{ width: 260, borderRight: '1px solid #eee', height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ width: 260, minWidth: 260, maxWidth: 260, boxSizing: 'border-box', flex: '0 0 260px', borderRight: '1px solid #eee', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: 12, fontWeight: 700 }}>多维表格</div>
   
       {/* 项目层级 */}

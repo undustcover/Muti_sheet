@@ -424,7 +424,7 @@ export default function App() {
     <div style={{ display: 'flex' }}>
       <Sidebar active={activeNav} onNavigate={setActiveNav} />
 
-      <div style={{ flex: 1, height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, minWidth: 0, height: '100vh', display: 'flex', flexDirection: 'column' }}>
         {/* 顶部：视图标签 */}
         <div style={{ padding: 12, borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Tabs
