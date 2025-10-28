@@ -1,0 +1,9 @@
+{
+  "name": "sheets-monorepo",
+  "private": true,
+  "packageManager": "pnpm@10.18.3",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}
