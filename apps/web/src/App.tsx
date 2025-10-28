@@ -24,6 +24,7 @@ type User = { id: string; name: string };
 type SelectOption = { id: string; label: string };
 type FormulaOp = 'sum' | 'add' | 'sub' | 'mul' | 'div' | 'avg' | 'max' | 'min';
 type FormulaConfig = { op: FormulaOp; fields: string[]; format?: { decimals: number; thousand: boolean } };
+type NumberFormat = { decimals: number; thousand: boolean };
 
 export type RowRecord = {
   id: string;
@@ -72,19 +73,59 @@ function CellEditor({ value, onChange, type, options }: {
   options?: SelectOption[];
 }) {
   if (type === 'text') {
-    return <input value={value ?? ''} onChange={(e) => onChange(e.target.value)} />;
+    return (
+      <input
+        className="sheet-input"
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+        autoFocus
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      />
+    );
   }
   if (type === 'number') {
-    return <input type="number" value={value ?? 0} onChange={(e) => onChange(Number(e.target.value))} />;
+    return (
+      <input
+        type="number"
+        className="sheet-input"
+        value={value ?? 0}
+        onChange={(e) => onChange(Number(e.target.value))}
+        autoFocus
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      />
+    );
   }
   if (type === 'date') {
     const v = value ? dayjs(value).format('YYYY-MM-DD') : '';
-    return <input type="date" value={v} onChange={(e) => onChange(dayjs(e.target.value).toISOString())} />;
+    return (
+      <input
+        type="date"
+        className="sheet-input"
+        value={v}
+        onChange={(e) => onChange(dayjs(e.target.value).toISOString())}
+        autoFocus
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      />
+    );
   }
   if (type === 'select') {
     const opts = options ?? initialOptions;
     return (
-      <select value={value?.id ?? ''} onChange={(e) => onChange(opts.find(o => o.id === e.target.value) ?? null)}>
+      <select
+        className="sheet-input"
+        value={value?.id ?? ''}
+        onChange={(e) => onChange(opts.find(o => o.id === e.target.value) ?? null)}
+        autoFocus
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         <option value="">(空)</option>
         {opts.map((opt) => (
           <option key={opt.id} value={opt.id}>{opt.label}</option>
@@ -133,12 +174,13 @@ function CellEditor({ value, onChange, type, options }: {
         <div
           ref={containerRef}
           tabIndex={0}
-          style={{ position: 'relative', minHeight: 26, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}
-          onClick={() => { cancelClose(); setOpen(true); }}
+          style={{ position: 'relative', minHeight: 26, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, font: 'inherit' }}
+          onClick={(e) => { e.stopPropagation(); cancelClose(); setOpen(true); }}
+          onMouseDown={(e) => e.stopPropagation()}
           onMouseEnter={cancelClose}
         >
           {(val ?? []).map((opt) => (
-            <span key={opt.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 6px', borderRadius: 12, background: '#eef2ff', color: '#334155', fontSize: 12 }}>
+            <span key={opt.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 6px', borderRadius: 12, background: '#eef2ff', color: '#334155', fontSize: '0.9em' }}>
               {opt.label}
               <button
                 title="移除"
@@ -222,19 +264,24 @@ export default function App() {
 
 
   // Column meta (header names & types)
-  const initialColumnMeta: Record<string, { name: string; type: string; description?: string; options?: SelectOption[]; formula?: FormulaConfig }> = {
+  const initialColumnMeta: Record<string, { name: string; type: string; description?: string; options?: SelectOption[]; formula?: FormulaConfig; format?: NumberFormat }> = {
     id: { name: 'ID', type: 'text', description: '' },
     text: { name: '文本', type: 'text', description: '' },
-    number: { name: '数字', type: 'number', description: '' },
+    number: { name: '数字', type: 'number', description: '', format: { decimals: 0, thousand: false } },
     date: { name: '日期', type: 'date', description: '' },
     select: { name: '选择', type: 'single', description: '', options: initialOptions },
     multiSelect: { name: '多选', type: 'multi', description: '', options: initialOptions },
     relation: { name: '关联', type: 'text', description: '' },
     user: { name: '用户', type: 'user', description: '' },
   };
-  const [columnMeta, setColumnMeta] = useState<Record<string, { name: string; type: string; description?: string; options?: SelectOption[]; formula?: FormulaConfig }>>(initialColumnMeta);
+  const [columnMeta, setColumnMeta] = useState<Record<string, { name: string; type: string; description?: string; options?: SelectOption[]; formula?: FormulaConfig; format?: NumberFormat }>>(initialColumnMeta);
   const [columnOrder, setColumnOrder] = useState<string[]>(Object.keys(initialColumnMeta));
   const [columnColors, setColumnColors] = useState<Record<string, string>>({});
+  // 选中单元格：仅选中时进入编辑态，其它保持展示态
+  const [selectedCell, setSelectedCell] = useState<{ rowId: string | null; columnId: string | null }>({ rowId: null, columnId: null });
+  const [editingCell, setEditingCell] = useState<{ rowId: string | null; columnId: string | null }>({ rowId: null, columnId: null });
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [selectionRange, setSelectionRange] = useState<{ start: { row: number; col: number } | null; end: { row: number; col: number } | null }>({ start: null, end: null });
 
   const columnItems: ColumnItem[] = useMemo(() => (
     columnOrder.filter((id) => !!columnMeta[id]).map((id) => ({ id, name: columnMeta[id].name, type: columnMeta[id].type }))
@@ -359,20 +406,56 @@ export default function App() {
         } as ColumnDef<RowRecord, any>;
       }
       const editorType = (['text','number','date','select','multiSelect','relation','user'] as const).includes(t as any) ? (t as any) : 'text';
+      const renderDisplay = (val: any) => {
+        if (editorType === 'text') return <span>{val ?? ''}</span>;
+        if (editorType === 'number') {
+          const fmt = (columnMeta as any)[id]?.format as NumberFormat | undefined;
+          const raw = val as number | '';
+          if (raw === '' || raw === null || raw === undefined) return <span />;
+          const decimals = fmt?.decimals ?? 0;
+          const thousand = !!fmt?.thousand;
+          if (thousand) {
+            const formatted = new Intl.NumberFormat('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(raw as number);
+            return <span>{formatted}</span>;
+          }
+          return <span>{decimals > 0 ? (raw as number).toFixed(decimals) : String(raw)}</span>;
+        }
+        if (editorType === 'date') {
+          const v = val ? dayjs(val).format('YYYY-MM-DD') : '';
+          return <span>{v}</span>;
+        }
+        if (editorType === 'select') return <span>{val?.label ?? ''}</span>;
+        if (editorType === 'multiSelect') return <span>{Array.isArray(val) ? val.map((m: any) => m?.label).filter(Boolean).join(', ') : ''}</span>;
+        if (editorType === 'relation') return <span>{val ?? ''}</span>;
+        if (editorType === 'user') return <span>{val?.name ?? ''}</span>;
+        return <span>{val ?? ''}</span>;
+      };
       return {
         id,
         header: () => meta.name,
         accessorKey: id,
-        cell: ({ row, getValue }) => (
-          <CellEditor type={editorType} value={getValue()} options={(editorType === 'select' || editorType === 'multiSelect') ? (columnMeta[id]?.options ?? initialOptions) : undefined} onChange={(v) => {
-            row._valuesCache = undefined; // bust cache
-            setData((prev) => prev.map((r) => (r.id === row.original.id ? { ...r, [id]: v } : r)));
-          }} />
-        )
+        cell: ({ row, getValue }) => {
+          const isSelected = selectedCell.rowId === row.original.id && selectedCell.columnId === id;
+          const val = getValue();
+          if (!isSelected || !(editingCell.rowId === row.original.id && editingCell.columnId === id)) {
+            return renderDisplay(val);
+          }
+          return (
+            <CellEditor
+              type={editorType}
+              value={val}
+              options={(editorType === 'select' || editorType === 'multiSelect') ? (columnMeta[id]?.options ?? initialOptions) : undefined}
+              onChange={(v) => {
+                row._valuesCache = undefined; // bust cache
+                setData((prev) => prev.map((r) => (r.id === row.original.id ? { ...r, [id]: v } : r)));
+              }}
+            />
+          );
+        }
       } as ColumnDef<RowRecord, any>;
     };
     return columnOrder.map((id) => makeDef(id)).filter(Boolean) as ColumnDef<RowRecord, any>[];
-  }, [columnMeta, columnOrder, setData]);
+  }, [columnMeta, columnOrder, setData, selectedCell, editingCell]);
 
   const table = useReactTable({
     data: filteredData,
@@ -392,6 +475,43 @@ export default function App() {
     estimateSize: () => ({ low: 28, medium: 40, high: 56, xhigh: 72 }[rowHeight]),
     overscan: 10,
   });
+
+  // 键盘导航与编辑触发
+  const moveSelection = (dRow: number, dCol: number) => {
+    const rows = table.getRowModel().rows;
+    const cols = columns;
+    const currRowIdx = Math.max(0, rows.findIndex((r) => r.original.id === selectedCell.rowId));
+    const currColIdx = Math.max(0, cols.findIndex((c: any) => c.id === selectedCell.columnId));
+    const nextRowIdx = Math.min(Math.max(currRowIdx + dRow, 0), rows.length - 1);
+    const nextColIdx = Math.min(Math.max(currColIdx + dCol, 0), cols.length - 1);
+    const nextRowId = rows[nextRowIdx]?.original.id ?? null;
+    const nextColId = (cols[nextColIdx] as any)?.id ?? null;
+    setSelectedCell({ rowId: nextRowId, columnId: nextColId });
+    setEditingCell({ rowId: null, columnId: null });
+  };
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    // 编辑中不拦截导航键
+    if (editingCell.rowId && editingCell.columnId) return;
+    if (!selectedCell.rowId || !selectedCell.columnId) return;
+    if (e.key === 'ArrowUp') { e.preventDefault(); moveSelection(-1, 0); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); moveSelection(1, 0); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); moveSelection(0, -1); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); moveSelection(0, 1); }
+    else if (e.key === 'Enter') { e.preventDefault(); setEditingCell({ ...selectedCell }); }
+    else if (e.key === 'Tab') {
+      e.preventDefault();
+      const isShift = e.shiftKey;
+      if (isShift) moveSelection(0, -1); else moveSelection(0, 1);
+    }
+  };
+  const isInRange = (rowIdx: number, colIdx: number): boolean => {
+    if (!selectionRange.start || !selectionRange.end) return false;
+    const r1 = Math.min(selectionRange.start.row, selectionRange.end.row);
+    const r2 = Math.max(selectionRange.start.row, selectionRange.end.row);
+    const c1 = Math.min(selectionRange.start.col, selectionRange.end.col);
+    const c2 = Math.max(selectionRange.start.col, selectionRange.end.col);
+    return rowIdx >= r1 && rowIdx <= r2 && colIdx >= c1 && colIdx <= c2;
+  };
 
   // Export
   const handleExport = () => {
@@ -632,7 +752,14 @@ export default function App() {
                  </div>
                )}
               
-              <div ref={parentRef} style={{ height: 'calc(100vh - 220px)', overflow: 'auto', position: 'relative', border: '1px solid #eee', marginTop: 8 }}>
+              <div
+                ref={parentRef}
+                className="sheet-grid"
+                style={{ height: 'calc(100vh - 220px)', overflow: 'auto', position: 'relative', border: '1px solid #eee', marginTop: 8 }}
+                tabIndex={0}
+                onKeyDown={onKeyDown}
+                onMouseUp={() => { setIsDragging(false); }}
+              >
                 <div style={{ height: rowVirtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
                   {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                     const row = table.getRowModel().rows[virtualRow.index]!;
@@ -641,21 +768,54 @@ export default function App() {
                         key={row.id}
                         data-index={virtualRow.index}
                         ref={rowVirtualizer.measureElement}
+                        className="sheet-grid-row"
                         style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    transform: `translateY(${virtualRow.start}px)`,
-                    display: 'grid',
-                    gridTemplateColumns: `repeat(${columns.length + 1}, ${colWidth}px)`,
-                    gap: 4,
-                    padding: '6px 0',
-                    borderBottom: '1px solid #f3f3f3',
-                  }}
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          transform: `translateY(${virtualRow.start}px)`,
+                          display: 'grid',
+                          gridTemplateColumns: `repeat(${columns.length + 1}, ${colWidth}px)`,
+                        }}
                       >
                           {row.getVisibleCells().map((cell, cIdx) => (
-                           <div key={cell.id} style={{ paddingRight: 8, position: cIdx < freezeCount ? 'sticky' : 'static', left: cIdx < freezeCount ? `${cIdx * colWidth}px` : undefined, zIndex: cIdx < freezeCount ? 2 : 1, background: cIdx < freezeCount ? '#fff' : getCellBg(row.original, cell.column.id) }}>
+                           <div
+                             key={cell.id}
+                             className={`sheet-cell${cIdx < freezeCount ? ' frozen' : ''}${cIdx === freezeCount - 1 ? ' frozen-shadow' : ''}${(selectedCell.rowId === row.original.id && selectedCell.columnId === cell.column.id) ? ' is-selected' : ''}${isInRange(virtualRow.index, cIdx) ? ' is-range' : ''}`}
+                             style={{
+                               position: cIdx < freezeCount ? 'sticky' : 'static',
+                               left: cIdx < freezeCount ? `${cIdx * colWidth}px` : undefined,
+                               zIndex: cIdx < freezeCount ? 2 : 1,
+                               background: cIdx < freezeCount ? '#fff' : getCellBg(row.original, cell.column.id),
+                             }}
+                             onClick={() => {
+                               const isEditingThis = editingCell.rowId === row.original.id && editingCell.columnId === cell.column.id;
+                               if (isEditingThis) {
+                                 // 点击编辑中的单元格，不打断编辑
+                                 return;
+                               }
+                               setSelectedCell({ rowId: row.original.id, columnId: cell.column.id });
+                               setEditingCell({ rowId: null, columnId: null });
+                               parentRef.current?.focus();
+                             }}
+                             onDoubleClick={() => {
+                               setSelectedCell({ rowId: row.original.id, columnId: cell.column.id });
+                               setEditingCell({ rowId: row.original.id, columnId: cell.column.id });
+                               // 进入编辑时不抢夺焦点，允许输入控件获取焦点
+                             }}
+                             onMouseDown={(e) => {
+                               if (e.button !== 0) return; // 仅左键
+                               setIsDragging(true);
+                               setSelectionRange({ start: { row: virtualRow.index, col: cIdx }, end: { row: virtualRow.index, col: cIdx } });
+                               setSelectedCell({ rowId: row.original.id, columnId: cell.column.id });
+                               setEditingCell({ rowId: null, columnId: null });
+                             }}
+                             onMouseEnter={() => {
+                               if (!isDragging) return;
+                               setSelectionRange((prev) => ({ start: prev.start, end: { row: virtualRow.index, col: cIdx } }));
+                             }}
+                           >
                             {flexRender(cell.column.columnDef.cell, cell.getContext())}
                           </div>
                         ))}
@@ -712,10 +872,11 @@ export default function App() {
         initialDescription={editingFieldId ? (columnMeta[editingFieldId]?.description ?? '') : ''}
         initialOptions={editingFieldId ? (columnMeta[editingFieldId]?.options ?? []) : []}
         initialFormula={editingFieldId ? (columnMeta[editingFieldId]?.formula) : undefined}
+        initialNumberFormat={editingFieldId ? (columnMeta[editingFieldId]?.format) : undefined}
         availableFields={columnItems}
         disabledTypeEdit={editingFieldId === 'id'}
         onClose={() => { setFieldDrawerOpen(false); setEditingFieldId(null); }}
-        onSave={({ id, name, type, description, options, formula }) => {
+        onSave={({ id, name, type, description, options, formula, format }) => {
           const trimmed = (name || '').trim();
           if (!trimmed) {
             show('字段名称不能为空', 'warning');
@@ -744,6 +905,11 @@ export default function App() {
                 meta.formula = formula ?? prev[id]?.formula ?? undefined;
               } else {
                 if (meta.formula) delete meta.formula;
+              }
+              if (type === 'number') {
+                meta.format = format ?? prev[id]?.format ?? { decimals: 0, thousand: false };
+              } else {
+                if (meta.format) delete meta.format;
               }
               next[id] = meta;
               if (!(type === 'single' || type === 'multi')) {

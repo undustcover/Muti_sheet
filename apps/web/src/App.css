@@ -40,3 +40,86 @@
 .read-the-docs {
   color: #888;
 }
+
+/* ====== Sheet Grid Styles ====== */
+.sheet-grid {
+  position: relative;
+}
+
+.sheet-grid-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  display: grid;
+  gap: 1px; /* grid lines between cells */
+  padding: 6px 0;
+  border-bottom: 1px solid #f3f3f3;
+}
+
+.sheet-cell {
+  position: relative;
+  padding: 6px 8px 6px 8px;
+  background: #fff;
+  border: 1px solid transparent;
+  transition: background 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+.sheet-cell:hover {
+  background: #f9fafb; /* light hover background */
+  border-color: #e5e7eb; /* light hover border */
+}
+
+.sheet-cell.is-selected {
+  outline: 1px solid #2563eb;
+  outline-offset: -1px;
+}
+
+.sheet-cell.is-range {
+  background: #eef2ff; /* selection range background */
+  border-color: #c7d2fe;
+}
+
+.sheet-cell.frozen {
+  position: sticky;
+  z-index: 2;
+  background: #fff; /* ensure frozen columns stay white */
+}
+
+.sheet-cell.frozen-shadow {
+  box-shadow: 6px 0 10px -6px rgba(0,0,0,0.08);
+}
+
+.sheet-header-menu {
+  position: absolute;
+  top: 100%;
+  right: 8px;
+}
+
+/* ====== Inline Editor Styles ====== */
+.sheet-input {
+  width: 100%;
+  height: 100%;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  padding: 0;
+  outline: none;
+}
+.sheet-input:focus {
+  outline: none;
+  border: none;
+  box-shadow: none;
+}
+.sheet-input[type="number"]::-webkit-outer-spin-button,
+.sheet-input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.sheet-input[type="number"] {
+  -moz-appearance: textfield;
+}
+.sheet-input[type="date"] {
+  font: inherit;
+}

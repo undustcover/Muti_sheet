@@ -15,10 +15,11 @@ type Props = {
   initialDescription?: string;
   initialOptions?: SelectOption[];
   initialFormula?: FormulaConfig;
+  initialNumberFormat?: { decimals: number; thousand: boolean };
   availableFields?: { id: string; name: string; type: string }[];
   disabledTypeEdit?: boolean; // e.g. lock type when protect mode or first column rules
   onClose: () => void;
-  onSave: (payload: { id: string; name: string; type: FieldType; description?: string; options?: SelectOption[]; formula?: FormulaConfig }) => void;
+  onSave: (payload: { id: string; name: string; type: FieldType; description?: string; options?: SelectOption[]; formula?: FormulaConfig; format?: { decimals: number; thousand: boolean } }) => void;
 };
 
 const typeOptions: { value: FieldType; label: string }[] = [
@@ -32,7 +33,7 @@ const typeOptions: { value: FieldType; label: string }[] = [
   { value: 'formula', label: '公式' },
 ];
 
-export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initialType = 'text', initialDescription, initialOptions, initialFormula, availableFields = [], disabledTypeEdit, onClose, onSave }) => {
+export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initialType = 'text', initialDescription, initialOptions, initialFormula, initialNumberFormat, availableFields = [], disabledTypeEdit, onClose, onSave }) => {
   const [name, setName] = useState(initialName ?? '');
   const [type, setType] = useState<FieldType>(initialType);
   const [description, setDescription] = useState(initialDescription ?? '');
@@ -42,6 +43,9 @@ export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initi
   const [formulaFields, setFormulaFields] = useState<string[]>(initialFormula?.fields ?? []);
   const [decimals, setDecimals] = useState<number>(initialFormula?.format?.decimals ?? 0);
   const [thousand, setThousand] = useState<boolean>(initialFormula?.format?.thousand ?? false);
+  // number 列的展示格式
+  const [numDecimals, setNumDecimals] = useState<number>(initialNumberFormat?.decimals ?? 0);
+  const [numThousand, setNumThousand] = useState<boolean>(initialNumberFormat?.thousand ?? false);
   const [batchOpen, setBatchOpen] = useState<boolean>(false);
 
   useEffect(() => {
@@ -55,6 +59,11 @@ export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initi
     setDecimals(initialFormula?.format?.decimals ?? 0);
     setThousand(initialFormula?.format?.thousand ?? false);
   }, [initialName, initialType, initialDescription, initialOptions, initialFormula, fieldId, open]);
+
+  useEffect(() => {
+    setNumDecimals(initialNumberFormat?.decimals ?? 0);
+    setNumThousand(initialNumberFormat?.thousand ?? false);
+  }, [initialNumberFormat, fieldId, open]);
 
   if (!open || !fieldId) return null;
 
@@ -232,6 +241,22 @@ export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initi
               </div>
             </div>
           )}
+          {type === 'number' && (
+            <div style={{ display: 'grid', rowGap: 8 }}>
+              <div style={{ fontWeight: 600 }}>数值格式</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <span>小数位</span>
+                  <input type="number" min={0} max={6} value={numDecimals} onChange={(e) => setNumDecimals(Math.max(0, Math.min(6, Number(e.target.value) || 0)))} style={{ width: 80 }} />
+                </label>
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input type="checkbox" checked={numThousand} onChange={(e) => setNumThousand(e.target.checked)} />
+                  <span>千分位</span>
+                </label>
+              </div>
+              <small style={{ color: '#666' }}>仅用于展示格式，不影响实际存储数值。</small>
+            </div>
+          )}
           {(type === 'single' || type === 'multi') && (
             <div style={{ display: 'grid', rowGap: 8 }}>
               <div style={{ fontWeight: 600 }}>选项内容</div>
@@ -275,20 +300,23 @@ export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initi
           <button onClick={onClose}>取消</button>
           <button
             style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 6 }}
-            onClick={() => {
-              if (!fieldId) return;
-              const payload: any = { id: fieldId, name: name.trim() || initialName || '', type, description: description.trim() };
-              if (type === 'single' || type === 'multi') {
-                payload.options = options;
-              }
-              if (type === 'formula') {
-                const binary = ['add','sub','mul','div'].includes(formulaOp);
-                const flds = binary ? formulaFields.slice(0, 2).filter(Boolean) : formulaFields.filter(Boolean);
-                payload.formula = { op: formulaOp, fields: flds, format: { decimals, thousand } };
-              }
-              onSave(payload);
-              onClose();
-            }}
+          onClick={() => {
+            if (!fieldId) return;
+            const payload: any = { id: fieldId, name: name.trim() || initialName || '', type, description: description.trim() };
+            if (type === 'single' || type === 'multi') {
+              payload.options = options;
+            }
+            if (type === 'formula') {
+              const binary = ['add','sub','mul','div'].includes(formulaOp);
+              const flds = binary ? formulaFields.slice(0, 2).filter(Boolean) : formulaFields.filter(Boolean);
+              payload.formula = { op: formulaOp, fields: flds, format: { decimals, thousand } };
+            }
+            if (type === 'number') {
+              payload.format = { decimals: numDecimals, thousand: numThousand };
+            }
+            onSave(payload);
+            onClose();
+          }}
           >保存</button>
         </div>
       </div>
