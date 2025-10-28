@@ -32,6 +32,28 @@ export const IconMore: React.FC<IconProps> = ({ size = 16, color, style, ...rest
   </svg>
 );
 
+export const IconCollect: React.FC<IconProps> = ({ size = 16, color, style, ...rest }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" style={{ display: 'inline-block', color, ...style }} {...rest}>
+    <path {...base} d="M4 7h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7z" />
+    <path {...base} d="M8 3h8v4H8z" />
+    <path {...base} d="M7 11h10M7 15h10" />
+  </svg>
+);
+
+export const IconDashboard: React.FC<IconProps> = ({ size = 16, color, style, ...rest }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" style={{ display: 'inline-block', color, ...style }} {...rest}>
+    <rect {...base} x="3" y="3" width="18" height="18" rx="2" />
+    <path {...base} d="M3 10h18M12 3v18" />
+    <path {...base} d="M16 16l-3-3-3 3" />
+  </svg>
+);
+
+export const IconFolder: React.FC<IconProps> = ({ size = 16, color, style, ...rest }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" style={{ display: 'inline-block', color, ...style }} {...rest}>
+    <path {...base} d="M3 6h6l2 2h10v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z" />
+  </svg>
+);
+
 export const IconChevronRight: React.FC<IconProps> = ({ size = 16, color, style, ...rest }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" style={{ display: 'inline-block', color, ...style }} {...rest}>
     <path {...base} d="M9 5l7 7-7 7" />

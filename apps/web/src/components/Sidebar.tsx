@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { IconPlus, IconTask, IconTable, IconMore, IconChevronDown, IconChevronRight } from './Icons';
+import { IconPlus, IconTask, IconTable, IconMore, IconChevronDown, IconChevronRight, IconCollect, IconDashboard, IconFolder } from './Icons';
 
 type Props = {
   active: string;
@@ -109,6 +109,7 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate }) => {
   const [collects, setCollects] = useState<SimpleItem[]>([]);
   const [dashboards, setDashboards] = useState<SimpleItem[]>([]);
   const [folders, setFolders] = useState<SimpleItem[]>([]);
+  const [activeProId, setActiveProId] = useState<string | null>(null);
   const openCompose = (type: 'project' | 'task' | 'table' | 'collect' | 'dashboard' | 'folder', projectId?: string, taskId?: string) => {
     setComposeOpen(true);
     setComposeType(type);
@@ -142,14 +143,17 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate }) => {
     } else if (composeType === 'collect') {
       const id = `collect-${collects.length + 1}-${Date.now()}`;
       setCollects(prev => [...prev, { id, name }]);
+      setActiveProId(id);
       onNavigate('collect');
     } else if (composeType === 'dashboard') {
       const id = `dashboard-${dashboards.length + 1}-${Date.now()}`;
       setDashboards(prev => [...prev, { id, name }]);
+      setActiveProId(id);
       onNavigate('dashboard');
     } else if (composeType === 'folder') {
       const id = `folder-${folders.length + 1}-${Date.now()}`;
       setFolders(prev => [...prev, { id, name }]);
+      setActiveProId(id);
       onNavigate('files');
     }
     closeCompose();
@@ -248,6 +252,7 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate }) => {
   };
   const deleteCollect = (id: string) => {
     setCollects(prev => prev.filter(it => it.id !== id));
+    setActiveProId(prev => (prev === id ? null : prev));
   };
 
   const renameDashboard = (id: string) => {
@@ -265,6 +270,7 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate }) => {
   };
   const deleteDashboard = (id: string) => {
     setDashboards(prev => prev.filter(it => it.id !== id));
+    setActiveProId(prev => (prev === id ? null : prev));
   };
 
   const renameFolder = (id: string) => {
@@ -282,6 +288,7 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate }) => {
   };
   const deleteFolder = (id: string) => {
     setFolders(prev => prev.filter(it => it.id !== id));
+    setActiveProId(prev => (prev === id ? null : prev));
   };
 
   const toggleProject = (projectId: string) => setExpandedProjects(e => ({ ...e, [projectId]: !e[projectId] }));
@@ -359,47 +366,54 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate }) => {
       </div>
   
       <div style={{ borderTop: '1px solid #eee', margin: '8px 0' }} />
-  
-      {/* 固定入口 */}
-      {/* 固定入口 */}
-      <Row label="收集表" active={active === 'collect'} onClick={() => onNavigate('collect')} />
-      <Row label="仪表盘" active={active === 'dashboard'} onClick={() => onNavigate('dashboard')} />
-      <Row label="文档" active={active === 'docs'} onClick={() => onNavigate('docs')} />
-      <Row label="文件夹" active={active === 'files'} onClick={() => onNavigate('files')} />
-      {/* 新增栏 */}
-      {/* 专业栏数据在组件状态中管理（已移至组件顶部） */}
-
-  <div style={{ borderTop: '1px solid #eee', margin: '8px 0' }} />
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, color: '#8a8a8a', padding: '8px 12px', textTransform: 'uppercase' }}>
     <span>专业</span>
   </div>
   <div>
     {collects.map(it => (
-      <Row key={it.id} label={it.name} onClick={() => onNavigate('collect')} trailing={(
-        <Menu items={[
-          { label: '重命名', onClick: () => renameCollect(it.id) },
-          { label: '复制', onClick: () => duplicateCollect(it.id) },
-          { label: '删除', onClick: () => deleteCollect(it.id), danger: true },
-        ]} />
-      )} />
+      <Row
+        key={it.id}
+        label={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><IconCollect />{it.name}</span>}
+        active={activeProId === it.id}
+        onClick={() => { setActiveProId(it.id); onNavigate('collect'); }}
+        trailing={(
+          <Menu items={[
+            { label: '重命名', onClick: () => renameCollect(it.id) },
+            { label: '复制', onClick: () => duplicateCollect(it.id) },
+            { label: '删除', onClick: () => deleteCollect(it.id), danger: true },
+          ]} />
+        )}
+      />
     ))}
     {dashboards.map(it => (
-      <Row key={it.id} label={it.name} onClick={() => onNavigate('dashboard')} trailing={(
-        <Menu items={[
-          { label: '重命名', onClick: () => renameDashboard(it.id) },
-          { label: '复制', onClick: () => duplicateDashboard(it.id) },
-          { label: '删除', onClick: () => deleteDashboard(it.id), danger: true },
-        ]} />
-      )} />
+      <Row
+        key={it.id}
+        label={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><IconDashboard />{it.name}</span>}
+        active={activeProId === it.id}
+        onClick={() => { setActiveProId(it.id); onNavigate('dashboard'); }}
+        trailing={(
+          <Menu items={[
+            { label: '重命名', onClick: () => renameDashboard(it.id) },
+            { label: '复制', onClick: () => duplicateDashboard(it.id) },
+            { label: '删除', onClick: () => deleteDashboard(it.id), danger: true },
+          ]} />
+        )}
+      />
     ))}
     {folders.map(it => (
-      <Row key={it.id} label={it.name} onClick={() => onNavigate('files')} trailing={(
-        <Menu items={[
-          { label: '重命名', onClick: () => renameFolder(it.id) },
-          { label: '复制', onClick: () => duplicateFolder(it.id) },
-          { label: '删除', onClick: () => deleteFolder(it.id), danger: true },
-        ]} />
-      )} />
+      <Row
+        key={it.id}
+        label={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><IconFolder />{it.name}</span>}
+        active={activeProId === it.id}
+        onClick={() => { setActiveProId(it.id); onNavigate('files'); }}
+        trailing={(
+          <Menu items={[
+            { label: '重命名', onClick: () => renameFolder(it.id) },
+            { label: '复制', onClick: () => duplicateFolder(it.id) },
+            { label: '删除', onClick: () => deleteFolder(it.id), danger: true },
+          ]} />
+        )}
+      />
     ))}
   </div>
   <div style={{ borderTop: '1px solid #eee', margin: '8px 0' }} />
