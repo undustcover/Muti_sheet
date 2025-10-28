@@ -12,6 +12,11 @@ import Toolbar from './components/Toolbar';
 import HeaderMenu from './components/HeaderMenu';
 import FieldDrawer from './components/FieldDrawer';
 import { useToast } from './components/Toast';
+import ConditionBuilder from './components/ConditionBuilder';
+import ColorRulesDrawer from './components/ColorRulesDrawer';
+import { useColorRulesStore } from './stores/colorRules';
+import type { ConditionGroup } from './stores/colorRules';
+import { matchesGroup, applyColorBackground } from './utils/logic';
 
 // Types for MVP fields
 type User = { id: string; name: string };
@@ -131,24 +136,34 @@ export default function App() {
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
   const [fieldDrawerOpen, setFieldDrawerOpen] = useState(false);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [colorOpen, setColorOpen] = useState(false);
 
 
   // Column meta (header names & types)
-  const [columnMeta, setColumnMeta] = useState<Record<string, { name: string; type: string }>>({
-    id: { name: 'ID', type: 'text' },
-    text: { name: '文本', type: 'text' },
-    number: { name: '数字', type: 'number' },
-    date: { name: '日期', type: 'date' },
-    select: { name: '选择', type: 'single' },
-    multiSelect: { name: '多选', type: 'multi' },
-    relation: { name: '关联', type: 'text' },
-    user: { name: '用户', type: 'user' },
-  });
+  const initialColumnMeta: Record<string, { name: string; type: string; description?: string }> = {
+    id: { name: 'ID', type: 'text', description: '' },
+    text: { name: '文本', type: 'text', description: '' },
+    number: { name: '数字', type: 'number', description: '' },
+    date: { name: '日期', type: 'date', description: '' },
+    select: { name: '选择', type: 'single', description: '' },
+    multiSelect: { name: '多选', type: 'multi', description: '' },
+    relation: { name: '关联', type: 'text', description: '' },
+    user: { name: '用户', type: 'user', description: '' },
+  };
+  const [columnMeta, setColumnMeta] = useState<Record<string, { name: string; type: string; description?: string }>>(initialColumnMeta);
+  const [columnOrder, setColumnOrder] = useState<string[]>(Object.keys(initialColumnMeta));
+  const [columnColors, setColumnColors] = useState<Record<string, string>>({});
 
   const columnItems: ColumnItem[] = useMemo(() => (
-    Object.entries(columnMeta).map(([id, meta]) => ({ id, name: meta.name, type: meta.type }))
-  ), [columnMeta]);
+    columnOrder.filter((id) => !!columnMeta[id]).map((id) => ({ id, name: columnMeta[id].name, type: columnMeta[id].type }))
+  ), [columnMeta, columnOrder]);
 
+  // 为逻辑函数提供的列类型映射（统一为 utils/logic 需要的类型名）
+  const logicColumnMeta = useMemo(() => {
+    const mapType = (t: string) => (t === 'single' ? 'select' : t === 'multi' ? 'multiSelect' : t);
+    return Object.fromEntries(Object.entries(columnMeta).map(([id, m]) => [id, { type: mapType(m.type) }]));
+  }, [columnMeta]);
   const visibleCount = useMemo(() => Object.keys(columnMeta).filter((id) => columnVisibility[id] !== false).length, [columnMeta, columnVisibility]);
 
   useEffect(() => {
@@ -160,6 +175,20 @@ export default function App() {
   const hasHidden = useMemo(() => Object.values(columnVisibility).some((v) => v === false), [columnVisibility]);
   const hiddenToastShownRef = useRef(false);
   const onlyFrozenToastShownRef = useRef(false);
+  // 过滤条件（支持条件组）
+  const [activeGroup, setActiveGroup] = useState<ConditionGroup | null>(null);
+  // 颜色规则读取
+  const rules = useColorRulesStore((s) => s.rules);
+  // 过滤后的数据
+  const filteredData = useMemo(() => (
+    !activeGroup ? data : data.filter((r) => matchesGroup(r, activeGroup, logicColumnMeta))
+  ), [data, activeGroup, logicColumnMeta]);
+  // 单元格背景色（综合规则与列基础色）
+  const getCellBg = (row: RowRecord, columnId: string): string | undefined => {
+    const { cellBg, rowBg } = applyColorBackground(rules, row, columnId, columnColors, logicColumnMeta);
+    return cellBg ?? rowBg;
+  };
+
   useEffect(() => {
      if (hasHidden && !hiddenToastShownRef.current) {
        show('已隐藏部分字段，可在字段菜单或工具栏恢复', 'info', { actionLabel: '显示已隐藏字段', onAction: showAllHidden });
@@ -177,77 +206,58 @@ export default function App() {
       onlyFrozenToastShownRef.current = false;
     }
   }, [visibleCount, freezeCount]);
-  const columns = useMemo<ColumnDef<RowRecord, any>[]>(() => [
-    {
-      id: 'id',
-      header: () => columnMeta.id.name,
-      accessorKey: 'id',
-      cell: (info) => info.getValue(),
-    },
-    {
-      id: 'text',
-      header: () => columnMeta.text.name,
-      accessorKey: 'text',
-      cell: ({ row, getValue }) => (
-        <CellEditor type="text" value={getValue()} onChange={(v) => {
-          row._valuesCache = undefined; // ensure row updates
-          row.original.text = v;
-          setData((prev) => prev.map((r) => (r.id === row.original.id ? { ...r, text: v } : r)));
-        }} />
-      ),
-    },
-    {
-      id: 'number',
-      header: () => columnMeta.number.name,
-      accessorKey: 'number',
-      cell: ({ row, getValue }) => (
-        <CellEditor type="number" value={getValue()} onChange={(v) => setData((prev) => prev.map((r) => (r.id === row.original.id ? { ...r, number: v } : r)))} />
-      ),
-    },
-    {
-      id: 'date',
-      header: () => columnMeta.date.name,
-      accessorKey: 'date',
-      cell: ({ row, getValue }) => (
-        <CellEditor type="date" value={getValue()} onChange={(v) => setData((prev) => prev.map((r) => (r.id === row.original.id ? { ...r, date: v } : r)))} />
-      ),
-    },
-    {
-      id: 'select',
-      header: () => columnMeta.select.name,
-      accessorKey: 'select',
-      cell: ({ row, getValue }) => (
-        <CellEditor type="select" value={getValue()} onChange={(v) => setData((prev) => prev.map((r) => (r.id === row.original.id ? { ...r, select: v } : r)))} />
-      ),
-    },
-    {
-      id: 'multiSelect',
-      header: () => columnMeta.multiSelect.name,
-      accessorKey: 'multiSelect',
-      cell: ({ row, getValue }) => (
-        <CellEditor type="multiSelect" value={getValue()} onChange={(v) => setData((prev) => prev.map((r) => (r.id === row.original.id ? { ...r, multiSelect: v } : r)))} />
-      ),
-    },
-    {
-      id: 'relation',
-      header: () => columnMeta.relation.name,
-      accessorKey: 'relation',
-      cell: ({ row, getValue }) => (
-        <CellEditor type="relation" value={getValue()} onChange={(v) => setData((prev) => prev.map((r) => (r.id === row.original.id ? { ...r, relation: v } : r)))} />
-      ),
-    },
-    {
-      id: 'user',
-      header: () => columnMeta.user.name,
-      accessorKey: 'user',
-      cell: ({ row, getValue }) => (
-        <CellEditor type="user" value={getValue()} onChange={(v) => setData((prev) => prev.map((r) => (r.id === row.original.id ? { ...r, user: v } : r)))} />
-      ),
-    },
-  ], [columnMeta, setData]);
+  const columns = useMemo<ColumnDef<RowRecord, any>[]>(() => {
+    const makeDef = (id: string): ColumnDef<RowRecord, any> | null => {
+      if (!(id in columnMeta)) return null;
+      const meta = columnMeta[id];
+      if (id === 'id') {
+        return { id, header: () => meta.name, accessorKey: 'id', cell: (info) => info.getValue() };
+      }
+      if (id === 'text') {
+        return { id, header: () => meta.name, accessorKey: 'text', cell: ({ row, getValue }) => (
+          <CellEditor type="text" value={getValue()} onChange={(v) => {
+            row._valuesCache = undefined; row.original.text = v;
+            setData((prev) => prev.map((r) => (r.id === row.original.id ? { ...r, text: v } : r)));
+          }} />
+        ) };
+      }
+      if (id === 'number') {
+        return { id, header: () => meta.name, accessorKey: 'number', cell: ({ row, getValue }) => (
+          <CellEditor type="number" value={getValue()} onChange={(v) => setData((prev) => prev.map((r) => (r.id === row.original.id ? { ...r, number: v } : r)))} />
+        ) };
+      }
+      if (id === 'date') {
+        return { id, header: () => meta.name, accessorKey: 'date', cell: ({ row, getValue }) => (
+          <CellEditor type="date" value={getValue()} onChange={(v) => setData((prev) => prev.map((r) => (r.id === row.original.id ? { ...r, date: v } : r)))} />
+        ) };
+      }
+      if (id === 'select') {
+        return { id, header: () => meta.name, accessorKey: 'select', cell: ({ row, getValue }) => (
+          <CellEditor type="select" value={getValue()} onChange={(v) => setData((prev) => prev.map((r) => (r.id === row.original.id ? { ...r, select: v } : r)))} />
+        ) };
+      }
+      if (id === 'multiSelect') {
+        return { id, header: () => meta.name, accessorKey: 'multiSelect', cell: ({ row, getValue }) => (
+          <CellEditor type="multiSelect" value={getValue()} onChange={(v) => setData((prev) => prev.map((r) => (r.id === row.original.id ? { ...r, multiSelect: v } : r)))} />
+        ) };
+      }
+      if (id === 'relation') {
+        return { id, header: () => meta.name, accessorKey: 'relation', cell: ({ row, getValue }) => (
+          <CellEditor type="relation" value={getValue()} onChange={(v) => setData((prev) => prev.map((r) => (r.id === row.original.id ? { ...r, relation: v } : r)))} />
+        ) };
+      }
+      if (id === 'user') {
+        return { id, header: () => meta.name, accessorKey: 'user', cell: ({ row, getValue }) => (
+          <CellEditor type="user" value={getValue()} onChange={(v) => setData((prev) => prev.map((r) => (r.id === row.original.id ? { ...r, user: v } : r)))} />
+        ) };
+      }
+      return null;
+    };
+    return columnOrder.map((id) => makeDef(id)).filter(Boolean) as ColumnDef<RowRecord, any>[];
+  }, [columnMeta, columnOrder, setData]);
 
   const table = useReactTable({
-    data,
+    data: filteredData,
     columns,
     state: { sorting, columnVisibility },
     onSortingChange: setSorting,
@@ -282,6 +292,11 @@ export default function App() {
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
     XLSX.writeFile(wb, 'export.xlsx');
   };
+  // 新增：导入处理（由 Toolbar 触发，已解析为行数据）
+  const onImport = (rows: RowRecord[]) => {
+    setData(rows);
+    show('已导入 Excel 数据', 'success');
+  };
 
   const onAddRecord = () => {
     setData((prev) => [{
@@ -295,13 +310,14 @@ export default function App() {
       const next = { ...meta };
       cols.forEach((c) => {
         if (c.id === 'id' && !(['text','date','number'] as string[]).includes(c.type)) {
-          next[c.id] = { name: c.name, type: 'text' };
+          next[c.id] = { name: c.name, type: 'text', description: next[c.id]?.description };
         } else {
-          next[c.id] = { name: c.name, type: c.type };
+          next[c.id] = { name: c.name, type: c.type, description: next[c.id]?.description };
         }
       });
       return next;
     });
+    // 保持当前顺序不变
   };
 
   const onEditField = (id: string) => { setEditingFieldId(id); setFieldDrawerOpen(true); };
@@ -339,15 +355,41 @@ export default function App() {
   const onDeleteField = (id: string) => {
     if (id === 'id') { show('不可删除 ID 字段', 'warning'); return; }
     setColumnMeta((prev) => {
-      const next = { ...prev } as Record<string, { name: string; type: string }>;
+      const next = { ...prev } as Record<string, { name: string; type: string; description?: string }>;
       delete next[id];
       return next;
     });
+    setColumnOrder((order) => order.filter((x) => x !== id));
     setColumnVisibility((v) => {
       const { [id]: _, ...rest } = v;
       return rest;
     });
     setSorting((s) => s.filter((x) => x.id !== id));
+  };
+  const onInsertLeft = (id: string) => {
+    setColumnOrder((order) => {
+      const idx = order.indexOf(id);
+      if (idx <= 0) return order;
+      const next = [...order];
+      next.splice(idx, 1);
+      next.splice(idx - 1, 0, id);
+      return next;
+    });
+  };
+  const onInsertRight = (id: string) => {
+    setColumnOrder((order) => {
+      const idx = order.indexOf(id);
+      if (idx < 0 || idx >= order.length - 1) return order;
+      const next = [...order];
+      next.splice(idx, 1);
+      next.splice(idx + 1, 0, id);
+      return next;
+    });
+  };
+  const onDuplicateField = (id: string) => { show('当前版本为固定字段集，复制字段暂不支持', 'info'); };
+  const onFillColorColumn = (columnId: string, color: string) => {
+    setColumnColors((prev) => ({ ...prev, [columnId]: color }));
+    show('整列填色已应用', 'success');
   };
 
   const showAllHidden = () => setColumnVisibility({});
@@ -405,13 +447,14 @@ export default function App() {
               onColumnsChange={onColumnsChange}
               rowHeight={rowHeight}
               onRowHeightChange={setRowHeight}
-              onFilterOpen={() => show('筛选器占位：添加条件、运算符、值等', 'info')}
-              onColorOpen={() => show('填色占位：24色、单元格/整行/整列、条件', 'info')}
+              onFilterOpen={() => setFilterOpen(true)}
+              onColorOpen={() => setColorOpen(true)}
               onGroupOpen={() => show('分组占位', 'info')}
               onSortOpen={() => show('排序占位', 'info')}
               onShowAllHidden={showAllHidden}
               onAddRecord={onAddRecord}
-              // 新增：提供可见性状态和切换处理
+              onImport={onImport}
+              onExport={handleExport}
               columnVisibility={columnVisibility}
               onToggleFieldVisibility={onToggleFieldVisibility}
             />
@@ -421,7 +464,7 @@ export default function App() {
         {/* 内容区 */}
         <div style={{ padding: 12, overflow: 'hidden', flex: 1 }}>
           {activeNav === 'table' && (
-            <div>
+            <div data-app-ready="1">
               <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns.length}, ${colWidth}px)`, gap: 4, fontWeight: 600, borderBottom: '1px solid #ddd', paddingBottom: 6 }}>
                   {table.getFlatHeaders().map((header, idx) => (
                     <div key={header.id} onClick={header.column.getToggleSortingHandler()} style={{ cursor: 'pointer', position: idx < freezeCount ? 'sticky' : 'static', left: idx < freezeCount ? `${idx * colWidth}px` : undefined, zIndex: idx < freezeCount ? 5 : 1, background: idx < freezeCount ? '#f7faff' : undefined }}>
@@ -439,6 +482,10 @@ export default function App() {
                         onEditField={onEditField}
                         onHideField={onHideField}
                         onDeleteField={onDeleteField}
+                        onInsertLeft={onInsertLeft}
+                        onInsertRight={onInsertRight}
+                        onDuplicateField={onDuplicateField}
+                        onFillColorColumn={onFillColorColumn}
                       />
                     </div>
                   ))}
@@ -475,7 +522,7 @@ export default function App() {
                         }}
                       >
                         {row.getVisibleCells().map((cell, cIdx) => (
-                          <div key={cell.id} style={{ paddingRight: 8, position: cIdx < freezeCount ? 'sticky' : 'static', left: cIdx < freezeCount ? `${cIdx * colWidth}px` : undefined, zIndex: cIdx < freezeCount ? 2 : 1, background: cIdx < freezeCount ? '#fff' : undefined }}>
+                          <div key={cell.id} style={{ paddingRight: 8, position: cIdx < freezeCount ? 'sticky' : 'static', left: cIdx < freezeCount ? `${cIdx * colWidth}px` : undefined, zIndex: cIdx < freezeCount ? 2 : 1, background: cIdx < freezeCount ? '#fff' : getCellBg(row.original, cell.column.id) }}>
                             {flexRender(cell.column.columnDef.cell, cell.getContext())}
                           </div>
                         ))}
@@ -529,9 +576,10 @@ export default function App() {
         fieldId={editingFieldId}
         initialName={editingFieldId ? columnMeta[editingFieldId]?.name : ''}
         initialType={editingFieldId ? (columnMeta[editingFieldId]?.type as any) : 'text'}
+        initialDescription={editingFieldId ? (columnMeta[editingFieldId]?.description ?? '') : ''}
         disabledTypeEdit={editingFieldId === 'id'}
         onClose={() => { setFieldDrawerOpen(false); setEditingFieldId(null); }}
-        onSave={({ id, name, type }) => {
+        onSave={({ id, name, type, description }) => {
           const trimmed = (name || '').trim();
           if (!trimmed) {
             show('字段名称不能为空', 'warning');
@@ -546,9 +594,9 @@ export default function App() {
           setColumnMeta((prev) => {
             const next = { ...prev } as any;
             if (id === 'id' && !(['text','date','number'] as string[]).includes(type)) {
-              next[id] = { name: trimmed, type: 'text' };
+              next[id] = { name: trimmed, type: 'text', description };
             } else {
-              next[id] = { name: trimmed, type } as any;
+              next[id] = { name: trimmed, type, description } as any;
             }
             return next;
           });
@@ -570,6 +618,27 @@ export default function App() {
           show('字段已更新', 'success');
         }}
       />
+      {filterOpen && (
+        <ConditionBuilder
+          open={filterOpen}
+          columns={columnItems}
+          onClose={() => setFilterOpen(false)}
+          onApply={(group) => {
+            const nextCount = data.filter((r) => matchesGroup(r, group, Object.fromEntries(Object.entries(columnMeta).map(([id, m]) => [id, { type: m.type }])))).length;
+            setActiveGroup(group);
+            setFilterOpen(false);
+            show(`筛选已应用，共 ${nextCount} 行`, 'success');
+          }}
+        />
+      )}
+      {colorOpen && (
+        <ColorRulesDrawer
+          open={colorOpen}
+          columns={columnItems.filter((c) => columnVisibility[c.id] !== false)}
+          onClose={() => setColorOpen(false)}
+          onApplyColumnColor={onFillColorColumn}
+        />
+      )}
     </div>
   );
 }

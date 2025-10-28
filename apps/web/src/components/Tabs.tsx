@@ -19,7 +19,7 @@ export const Tabs: React.FC<Props> = ({ views, activeId, onSelect, onAdd, onRena
   const [renameValue, setRenameValue] = useState('');
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing)' }}>
       {views.slice(0, 10).map((v) => {
         const isActive = v.id === activeId;
         return (
@@ -28,11 +28,11 @@ export const Tabs: React.FC<Props> = ({ views, activeId, onSelect, onAdd, onRena
               onClick={() => onSelect(v.id)}
               style={{
                 padding: '6px 12px',
-                borderRadius: 8,
-                border: isActive ? '1px solid #1f5fff' : '1px solid #ddd',
-                background: isActive ? '#f5f9ff' : '#fff',
+                borderRadius: 'var(--radius)',
+                border: isActive ? '1px solid var(--color-primary)' : '1px solid var(--border)',
+                background: isActive ? 'var(--surface-accent)' : 'var(--surface)',
                 cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: 6
+                display: 'flex', alignItems: 'center', gap: 'var(--spacing)'
               }}
             >
               {renameFor === v.id ? (
@@ -60,20 +60,20 @@ export const Tabs: React.FC<Props> = ({ views, activeId, onSelect, onAdd, onRena
               <div
                 style={{
                   position: 'absolute', top: '110%', left: 0, zIndex: 20,
-                  background: '#fff', border: '1px solid #ddd', borderRadius: 8, boxShadow: '0 6px 24px rgba(0,0,0,0.08)'
+                  background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', boxShadow: 'var(--shadow)'
                 }}
               >
-                <div style={{ padding: 8, cursor: 'pointer' }} onClick={() => { setRenameFor(v.id); setRenameValue(v.name); setMenuFor(null); }}>重命名</div>
-                <div style={{ padding: 8, cursor: 'pointer' }} onClick={() => { onDuplicate(v.id); setMenuFor(null); }}>复制视图</div>
-                <div style={{ padding: 8, cursor: 'pointer' }} onClick={() => { onProtectClick(v.id); setMenuFor(null); }}>保护视图</div>
-                <div style={{ borderTop: '1px solid #eee' }} />
-                <div style={{ padding: 8, cursor: 'pointer', color: '#c00' }} onClick={() => { onDelete(v.id); setMenuFor(null); }}>删除视图</div>
+                <div style={{ padding: 'var(--spacing)', cursor: 'pointer' }} onClick={() => { setRenameFor(v.id); setRenameValue(v.name); setMenuFor(null); }}>重命名</div>
+                <div style={{ padding: 'var(--spacing)', cursor: 'pointer' }} onClick={() => { onDuplicate(v.id); setMenuFor(null); }}>复制视图</div>
+                <div style={{ padding: 'var(--spacing)', cursor: 'pointer' }} onClick={() => { onProtectClick(v.id); setMenuFor(null); }}>保护视图</div>
+                <div style={{ borderTop: '1px solid var(--border)' }} />
+                <div style={{ padding: 'var(--spacing)', cursor: 'pointer', color: '#c00' }} onClick={() => { onDelete(v.id); setMenuFor(null); }}>删除视图</div>
               </div>
             )}
           </div>
         );
       })}
-      <button onClick={onAdd} style={{ padding: '6px 10px', borderRadius: 8 }}>+ 新建视图</button>
+      <button onClick={onAdd} style={{ padding: '6px 10px', borderRadius: 'var(--radius)' }}>+ 新建视图</button>
     </div>
   );
 };

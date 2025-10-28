@@ -37,19 +37,19 @@ const Row: React.FC<{ label: React.ReactNode; active?: boolean; onClick?: () => 
   <div
     onClick={onClick}
     style={{
-      padding: '8px 12px',
+      padding: 'var(--spacing) 12px',
       cursor: 'pointer',
-      borderRadius: 6,
+      borderRadius: 'var(--radius)',
       background: active ? '#e6f0ff' : 'transparent',
-      color: active ? '#1f5fff' : '#202020',
-      margin: '2px 8px',
+      color: active ? 'var(--color-primary)' : '#202020',
+      margin: '2px var(--spacing)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between'
     }}
   >
     <span>{label}</span>
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>{trailing}</span>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--spacing)' }}>{trailing}</span>
   </div>
 );
 
@@ -60,9 +60,9 @@ const Menu: React.FC<{ items: { label: string; onClick: () => void; danger?: boo
     <div style={{ position: 'relative', display: 'inline-block' }} onClick={(e) => e.stopPropagation()}>
       <span role="button" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }} onClick={() => setOpen(!open)}><IconMore /></span>
       {open && (
-        <div style={{ position: 'absolute', top: '120%', right: 0, background: '#fff', border: '1px solid #ddd', borderRadius: 8, boxShadow: '0 6px 24px rgba(0,0,0,0.08)', minWidth: 160, zIndex: 60 }}>
+        <div style={{ position: 'absolute', top: '120%', right: 0, background: '#fff', border: '1px solid #ddd', borderRadius: 'var(--radius)', boxShadow: 'var(--shadow)', minWidth: 160, zIndex: 60 }}>
           {items.map((it, idx) => (
-            <div key={idx} style={{ padding: 8, cursor: 'pointer', color: it.danger ? '#c00' : undefined }} onClick={() => { it.onClick(); setOpen(false); }}>{it.label}</div>
+            <div key={idx} style={{ padding: 'var(--spacing)', cursor: 'pointer', color: it.danger ? '#c00' : undefined }} onClick={() => { it.onClick(); setOpen(false); }}>{it.label}</div>
           ))}
         </div>
       )}
@@ -439,7 +439,7 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate }) => {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span>名称</span>
-          <input value={composeName} onChange={(e) => setComposeName(e.target.value)} style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #ddd' }} />
+          <input value={composeName} onChange={(e) => setComposeName(e.target.value)} style={{ padding: '6px 8px', borderRadius: 'var(--radius)', border: '1px solid #ddd' }} />
         </label>
         {composeType === 'task' && (
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -473,7 +473,7 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate }) => {
                 value={composeTaskId ?? ''}
                 onChange={(e) => { const v = e.target.value || null; setComposeTaskId(v); }}
                 disabled={!composeProjectId}
-                style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #ddd' }}
+                style={{ padding: '6px 8px', borderRadius: 'var(--radius)', border: '1px solid #ddd' }}
               >
                 <option value="">请选择任务</option>
                 {(projects.find(p => p.id === composeProjectId)?.tasks || []).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -484,7 +484,7 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate }) => {
         {composeType === 'table' && (
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <span>简介</span>
-            <textarea value={composeDesc} onChange={(e) => setComposeDesc(e.target.value)} rows={3} style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #ddd', resize: 'vertical' }} />
+            <textarea value={composeDesc} onChange={(e) => setComposeDesc(e.target.value)} rows={3} style={{ padding: '6px 8px', borderRadius: 'var(--radius)', border: '1px solid #ddd', resize: 'vertical' }} />
           </label>
         )}
       </div>
@@ -495,45 +495,4 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate }) => {
 
 export default Sidebar;
 
-// 专业栏：重命名/复制/删除
-const renameCollect = (id: string) => {
-const name = (window.prompt('重命名收集表') || '').trim();
-if (!name) return;
-setCollects(prev => prev.map(it => it.id === id ? { ...it, name } : it));
-};
-const duplicateCollect = (id: string) => {
-setCollects(prev => {
-const src = prev.find(it => it.id === id);
-if (!src) return prev;
-return [...prev, { id: `${id}-copy-${Date.now()}`, name: `${src.name} 副本` }];
-});
-};
-const deleteCollect = (id: string) => setCollects(prev => prev.filter(it => it.id !== id));
-
-const renameDashboard = (id: string) => {
-const name = (window.prompt('重命名仪表盘') || '').trim();
-if (!name) return;
-setDashboards(prev => prev.map(it => it.id === id ? { ...it, name } : it));
-};
-const duplicateDashboard = (id: string) => {
-setDashboards(prev => {
-const src = prev.find(it => it.id === id);
-if (!src) return prev;
-return [...prev, { id: `${id}-copy-${Date.now()}`, name: `${src.name} 副本` }];
-});
-};
-const deleteDashboard = (id: string) => setDashboards(prev => prev.filter(it => it.id !== id));
-
-const renameFolder = (id: string) => {
-const name = (window.prompt('重命名文件夹') || '').trim();
-if (!name) return;
-setFolders(prev => prev.map(it => it.id === id ? { ...it, name } : it));
-};
-const duplicateFolder = (id: string) => {
-setFolders(prev => {
-const src = prev.find(it => it.id === id);
-if (!src) return prev;
-return [...prev, { id: `${id}-copy-${Date.now()}`, name: `${src.name} 副本` }];
-});
-};
-const deleteFolder = (id: string) => setFolders(prev => prev.filter(it => it.id !== id));
+;

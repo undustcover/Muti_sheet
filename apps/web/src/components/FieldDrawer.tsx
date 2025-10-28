@@ -7,9 +7,10 @@ type Props = {
   fieldId: string | null;
   initialName?: string;
   initialType?: FieldType;
+  initialDescription?: string;
   disabledTypeEdit?: boolean; // e.g. lock type when protect mode or first column rules
   onClose: () => void;
-  onSave: (payload: { id: string; name: string; type: FieldType }) => void;
+  onSave: (payload: { id: string; name: string; type: FieldType; description?: string }) => void;
 };
 
 const typeOptions: { value: FieldType; label: string }[] = [
@@ -22,14 +23,16 @@ const typeOptions: { value: FieldType; label: string }[] = [
   { value: 'relation', label: '关联' },
 ];
 
-export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initialType = 'text', disabledTypeEdit, onClose, onSave }) => {
+export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initialType = 'text', initialDescription, disabledTypeEdit, onClose, onSave }) => {
   const [name, setName] = useState(initialName ?? '');
   const [type, setType] = useState<FieldType>(initialType);
+  const [description, setDescription] = useState(initialDescription ?? '');
 
   useEffect(() => {
     setName(initialName ?? '');
     setType(initialType ?? 'text');
-  }, [initialName, initialType, fieldId, open]);
+    setDescription(initialDescription ?? '');
+  }, [initialName, initialType, initialDescription, fieldId, open]);
 
   if (!open || !fieldId) return null;
 
@@ -57,6 +60,10 @@ export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initi
             </select>
             {disabledTypeEdit && <small style={{ color: '#999' }}>当前字段类型不可更改</small>}
           </label>
+          <label style={{ display: 'grid', rowGap: 6 }}>
+            <span>字段描述</span>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder="用于解释该字段用途或输入规范" />
+          </label>
         </div>
         <div style={{ marginTop: 'auto', padding: 16, borderTop: '1px solid #f2f2f2', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={onClose}>取消</button>
@@ -64,7 +71,7 @@ export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initi
             style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 6 }}
             onClick={() => {
               if (!fieldId) return;
-              onSave({ id: fieldId, name: name.trim() || initialName || '', type });
+              onSave({ id: fieldId, name: name.trim() || initialName || '', type, description: description.trim() });
               onClose();
             }}
           >保存</button>

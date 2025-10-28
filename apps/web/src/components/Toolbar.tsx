@@ -74,13 +74,13 @@ export const Toolbar: React.FC<Props> = ({ columns, onColumnsChange, rowHeight, 
       <div style={{ position: 'relative' }}>
         <button onClick={() => setFieldOpen(!fieldOpen)}>字段配置 ▾</button>
         {fieldOpen && (
-          <div style={{ position: 'absolute', top: '110%', left: 0, background: '#fff', border: '1px solid #ddd', borderRadius: 8, minWidth: 260, zIndex: 30 }}>
+          <div style={{ position: 'absolute', top: '110%', left: 0, background: '#fff', border: '1px solid #ddd', borderRadius: 'var(--radius)', minWidth: 260, zIndex: 30, boxShadow: 'var(--shadow)' }}>
             {columns.map((c) => {
               const isVisible = (columnVisibility?.[c.id] !== false);
               return (
-                <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 8 }}>
+                <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--spacing)' }}>
                   <span>{c.name}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing)' }}>
                     {/* 新增：隐藏/显示图标按钮 */}
                     <span
                       role="button"
@@ -98,7 +98,7 @@ export const Toolbar: React.FC<Props> = ({ columns, onColumnsChange, rowHeight, 
       </div>
 
       {editTarget && (
-        <div style={{ position: 'fixed', left: '50%', top: '20%', transform: 'translateX(-50%)', background: '#fff', border: '1px solid #ddd', borderRadius: 8, padding: 16, zIndex: 40, width: 420 }}>
+        <div style={{ position: 'fixed', left: '50%', top: '20%', transform: 'translateX(-50%)', background: '#fff', border: '1px solid #ddd', borderRadius: 'var(--radius)', padding: 'calc(var(--spacing) * 2)', zIndex: 40, width: 420 }}>
           <div style={{ fontWeight: 700, marginBottom: 8 }}>编辑字段</div>
           <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 8, alignItems: 'center' }}>
             <div>标题</div>
@@ -122,9 +122,9 @@ export const Toolbar: React.FC<Props> = ({ columns, onColumnsChange, rowHeight, 
 
       <div style={{ position: 'relative' }}>
         <button onClick={() => { /* toggle */ }}>行高 ▾</button>
-        <div style={{ position: 'absolute', top: '110%', left: 0, background: '#fff', border: '1px solid #ddd', borderRadius: 8 }}>
+        <div style={{ position: 'absolute', top: '110%', left: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', boxShadow: 'var(--shadow)' }}>
           {(['low','medium','high','xhigh'] as const).map(h => (
-            <div key={h} style={{ padding: 8, cursor: 'pointer', fontWeight: rowHeight === h ? 700 : 400 }} onClick={() => onRowHeightChange(h)}>
+            <div key={h} style={{ padding: 'var(--spacing)', cursor: 'pointer', fontWeight: rowHeight === h ? 700 : 400 }} onClick={() => onRowHeightChange(h)}>
               {h}
             </div>
           ))}
