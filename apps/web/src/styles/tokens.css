@@ -1,0 +1,21 @@
+:root {
+  --color-primary: #1f5fff;
+  --radius: 8px;
+  --shadow: 0 8px 24px rgba(0,0,0,0.08);
+  --spacing: 8px;
+  --surface: #ffffff;
+  --border: #dddddd;
+  --muted: #888888;
+  --surface-accent: #f5f9ff;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+}
+
+/* Base font application */
+html, body, #root {
+  font-family: var(--font);
+}
+
+/* Basic reset for buttons and inputs to inherit font */
+button, input, select, textarea {
+  font-family: inherit;
+}
