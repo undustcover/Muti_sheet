@@ -100,44 +100,150 @@ function CellEditor({ value, onChange, type, options }: {
     );
   }
   if (type === 'date') {
-    const v = value ? dayjs(value).format('YYYY-MM-DD') : '';
-    return (
-      <input
-        type="date"
-        className="sheet-input"
-        value={v}
-        onChange={(e) => onChange(dayjs(e.target.value).toISOString())}
-        autoFocus
-        onClick={(e) => e.stopPropagation()}
-        onDoubleClick={(e) => e.stopPropagation()}
-        onMouseDown={(e) => e.stopPropagation()}
-      />
-    );
+    const DatePickerControl: React.FC<{ val: string | null; onCommit: (iso: string) => void }> = ({ val, onCommit }) => {
+      const [open, setOpen] = useState(false);
+      const containerRef = useRef<HTMLDivElement | null>(null);
+      const panelRef = useRef<HTMLDivElement | null>(null);
+      const closeTimerRef = useRef<number | null>(null);
+      const scheduleClose = () => {
+        if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = window.setTimeout(() => setOpen(false), 150);
+      };
+      const cancelClose = () => {
+        if (closeTimerRef.current) {
+          window.clearTimeout(closeTimerRef.current);
+          closeTimerRef.current = null;
+        }
+      };
+      const initial = val ? dayjs(val) : dayjs();
+      const [viewMonth, setViewMonth] = useState(initial.startOf('month'));
+      const [activeDate, setActiveDate] = useState(initial);
+      const [dropdownPos, setDropdownPos] = useState<{ left: number; top: number; width: number } | null>(null);
+      const updatePos = () => {
+        const el = containerRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        setDropdownPos({ left: Math.round(rect.left), top: Math.round(rect.bottom + 4), width: Math.round(rect.width) });
+      };
+      useEffect(() => {
+        if (open) {
+          updatePos();
+          const handler = () => updatePos();
+          window.addEventListener('scroll', handler, true);
+          window.addEventListener('resize', handler);
+          return () => {
+            window.removeEventListener('scroll', handler, true);
+            window.removeEventListener('resize', handler);
+          };
+        }
+      }, [open]);
+      // 智能翻转定位
+      useEffect(() => {
+        if (!open) return;
+        const t = window.setTimeout(() => {
+          const panel = panelRef.current;
+          const container = containerRef.current;
+          if (!panel || !container) return;
+          const panelRect = panel.getBoundingClientRect();
+          const contRect = container.getBoundingClientRect();
+          const vw = window.innerWidth;
+          const vh = window.innerHeight;
+          let top = contRect.bottom + 4;
+          let left = contRect.left;
+          if (panelRect.bottom > vh && contRect.top - panelRect.height - 4 >= 8) {
+            top = contRect.top - panelRect.height - 4;
+          }
+          if (panelRect.right > vw) {
+            left = Math.max(8, contRect.right - panelRect.width);
+          }
+          setDropdownPos({ left: Math.round(left), top: Math.round(top), width: Math.round(contRect.width) });
+        }, 0);
+        return () => window.clearTimeout(t);
+      }, [open]);
+      const days: dayjs.Dayjs[] = useMemo(() => {
+        const start = viewMonth.startOf('month').startOf('week');
+        const arr: dayjs.Dayjs[] = [];
+        for (let i = 0; i < 42; i++) arr.push(start.add(i, 'day'));
+        return arr;
+      }, [viewMonth]);
+      const selectDate = (d: dayjs.Dayjs) => {
+        setActiveDate(d);
+        onCommit(d.toISOString());
+        setOpen(false);
+      };
+      const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        e.stopPropagation();
+        if (!open && (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ')) { setOpen(true); return; }
+        if (!open) return;
+        if (e.key === 'Escape') { setOpen(false); return; }
+        if (e.key === 'ArrowLeft') { e.preventDefault(); const nd = activeDate.subtract(1, 'day'); setActiveDate(nd); setViewMonth(nd.startOf('month')); }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); const nd = activeDate.add(1, 'day'); setActiveDate(nd); setViewMonth(nd.startOf('month')); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); const nd = activeDate.subtract(7, 'day'); setActiveDate(nd); setViewMonth(nd.startOf('month')); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); const nd = activeDate.add(7, 'day'); setActiveDate(nd); setViewMonth(nd.startOf('month')); }
+        else if (e.key === 'Enter') { e.preventDefault(); selectDate(activeDate); }
+      };
+      const display = val ? dayjs(val).format('YYYY-MM-DD') : '';
+      return (
+        <div
+          ref={containerRef}
+          tabIndex={0}
+          style={{ position: 'relative', minHeight: 26, padding: '0 8px', border: '1px solid #e5e7eb', borderRadius: 6, display: 'flex', alignItems: 'center', font: 'inherit' }}
+          onClick={(e) => { e.stopPropagation(); cancelClose(); setOpen(true); }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onMouseEnter={cancelClose}
+          onKeyDown={onKeyDown}
+        >
+          <span style={{ flex: 1, color: display ? '#0f172a' : '#64748b' }}>{display || '选择日期'}</span>
+          {open && dropdownPos && createPortal(
+            <div
+              ref={panelRef}
+              style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, minWidth: Math.max(220, dropdownPos.width), background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 8px 30px rgba(0,0,0,0.12)', zIndex: 10000 }}
+              onMouseEnter={cancelClose}
+              onMouseLeave={scheduleClose}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 8, borderBottom: '1px solid #f1f5f9' }}>
+                <button onMouseDown={(e) => e.preventDefault()} onClick={() => setViewMonth((m) => m.subtract(1, 'month'))} style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}>‹</button>
+                <span style={{ fontWeight: 600 }}>{viewMonth.format('YYYY年MM月')}</span>
+                <button onMouseDown={(e) => e.preventDefault()} onClick={() => setViewMonth((m) => m.add(1, 'month'))} style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}>›</button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, padding: 8 }}>
+                {['一','二','三','四','五','六','日'].map((w) => (
+                  <div key={w} style={{ textAlign: 'center', color: '#64748b', fontSize: 12 }}>{w}</div>
+                ))}
+                {days.map((d) => {
+                  const inMonth = d.month() === viewMonth.month();
+                  const isSelected = val ? d.isSame(dayjs(val), 'day') : false;
+                  const isActive = d.isSame(activeDate, 'day');
+                  return (
+                    <div
+                      key={d.toString()}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={(e) => { e.stopPropagation(); selectDate(d); }}
+                      onDoubleClick={(e) => { e.stopPropagation(); selectDate(d); }}
+                      onMouseEnter={() => setActiveDate(d)}
+                      style={{ padding: '6px 0', textAlign: 'center', borderRadius: 6, cursor: 'pointer', background: isActive ? '#f1f5f9' : 'transparent', color: inMonth ? (isSelected ? '#fff' : '#0f172a') : '#cbd5e1', ...(isSelected ? { background: '#6366f1' } : {}) }}
+                    >
+                      {d.date()}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>,
+            document.body
+          )}
+        </div>
+      );
+    };
+    return <DatePickerControl val={value ?? null} onCommit={(iso) => onChange(iso)} />;
   }
   if (type === 'select') {
     const opts = options ?? initialOptions;
-    return (
-      <select
-        className="sheet-input"
-        value={value?.id ?? ''}
-        onChange={(e) => onChange(opts.find(o => o.id === e.target.value) ?? null)}
-        autoFocus
-        onClick={(e) => e.stopPropagation()}
-        onDoubleClick={(e) => e.stopPropagation()}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <option value="">(空)</option>
-        {opts.map((opt) => (
-          <option key={opt.id} value={opt.id}>{opt.label}</option>
-        ))}
-      </select>
-    );
-  }
-  if (type === 'multiSelect') {
-    const opts = options ?? initialOptions;
-    const MultiSelectControl: React.FC<{ val: SelectOption[]; onChange: (v: SelectOption[]) => void }> = ({ val, onChange }) => {
+    const SingleSelectControl: React.FC<{ val: SelectOption | null; onChange: (v: SelectOption | null) => void; showAvatar?: boolean }> = ({ val, onChange, showAvatar }) => {
       const [open, setOpen] = useState(false);
+      const [query, setQuery] = useState('');
       const containerRef = useRef<HTMLDivElement | null>(null);
+      const panelRef = useRef<HTMLDivElement | null>(null);
+      const listParentRef = useRef<HTMLDivElement | null>(null);
       const closeTimerRef = useRef<number | null>(null);
       const scheduleClose = () => {
         if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
@@ -168,8 +274,252 @@ function CellEditor({ value, onChange, type, options }: {
           };
         }
       }, [open]);
+      // 智能翻转定位：根据视口可用空间在面板渲染后进行修正
+      useEffect(() => {
+        if (!open) return;
+        const t = window.setTimeout(() => {
+          const panel = panelRef.current;
+          const container = containerRef.current;
+          if (!panel || !container) return;
+          const panelRect = panel.getBoundingClientRect();
+          const contRect = container.getBoundingClientRect();
+          const vw = window.innerWidth;
+          const vh = window.innerHeight;
+          let top = contRect.bottom + 4;
+          let left = contRect.left;
+          if (panelRect.bottom > vh && contRect.top - panelRect.height - 4 >= 8) {
+            top = contRect.top - panelRect.height - 4;
+          }
+          if (panelRect.right > vw) {
+            left = Math.max(8, contRect.right - panelRect.width);
+          }
+          setDropdownPos({ left: Math.round(left), top: Math.round(top), width: Math.round(contRect.width) });
+        }, 0);
+        return () => window.clearTimeout(t);
+      }, [open, query]);
+      const filtered = (opts ?? []).filter((o) => (o.label ?? '').toLowerCase().includes(query.toLowerCase()));
+      const [activeIndex, setActiveIndex] = useState<number>(-1);
+      useEffect(() => {
+        if (open) {
+          if (val) {
+            const idx = filtered.findIndex((o) => o.id === val.id);
+            setActiveIndex(idx >= 0 ? idx : (filtered.length > 0 ? 0 : -1));
+          } else {
+            setActiveIndex(filtered.length > 0 ? 0 : -1);
+          }
+        }
+      }, [open, val, query]);
+      const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (!open) {
+          if (e.key === 'ArrowDown' || e.key === 'Enter') {
+            e.preventDefault();
+            cancelClose();
+            setOpen(true);
+          }
+          return;
+        }
+        if (['ArrowDown','ArrowUp','Enter','Escape'].includes(e.key)) e.preventDefault();
+        if (e.key === 'ArrowDown') {
+          setActiveIndex((i) => Math.min((i < 0 ? 0 : i) + 1, filtered.length - 1));
+        } else if (e.key === 'ArrowUp') {
+          setActiveIndex((i) => Math.max((i < 0 ? 0 : i) - 1, 0));
+        } else if (e.key === 'Enter') {
+          if (activeIndex >= 0 && filtered[activeIndex]) {
+            onChange(filtered[activeIndex]);
+            setOpen(false);
+          }
+        } else if (e.key === 'Escape') {
+          setOpen(false);
+        }
+      };
+      const rowVirtualizer = useVirtualizer({
+        count: filtered.length,
+        getScrollElement: () => listParentRef.current,
+        estimateSize: () => 30,
+        overscan: 5,
+      });
+      useEffect(() => {
+        if (!open) return;
+        if (activeIndex >= 0) rowVirtualizer.scrollToIndex(activeIndex, { align: 'center' });
+      }, [open, activeIndex]);
+      const initials = (txt: string) => {
+        const s = (txt || '').trim();
+        if (!s) return '';
+        const parts = s.split(/\s+/);
+        const first = parts[0]?.[0] ?? '';
+        const last = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? '' : '';
+        return (first + last).toUpperCase();
+      };
+      return (
+        <div
+          ref={containerRef}
+          tabIndex={0}
+          style={{ position: 'relative', minHeight: 26, display: 'flex', alignItems: 'center', gap: 6, font: 'inherit' }}
+          onClick={(e) => { e.stopPropagation(); cancelClose(); setOpen(true); }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onMouseEnter={cancelClose}
+          onKeyDown={onKeyDown}
+        >
+          {val ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              {showAvatar && (
+                <span style={{ width: 18, height: 18, borderRadius: '50%', background: '#e2e8f0', color: '#334155', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>
+                  {initials(val.label)}
+                </span>
+              )}
+              <span>{val.label}</span>
+              <button
+                title="清除"
+                onClick={(e) => { e.stopPropagation(); onChange(null); }}
+                style={{ border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer' }}
+              >×</button>
+            </span>
+          ) : (
+            <span style={{ color: '#94a3b8' }}>（空）</span>
+          )}
+          {open && dropdownPos && createPortal(
+            <div
+              ref={panelRef}
+              style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, minWidth: Math.max(160, dropdownPos.width), background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, boxShadow: '0 8px 30px rgba(0,0,0,0.12)', zIndex: 10000 }}
+              onMouseEnter={cancelClose}
+              onMouseLeave={scheduleClose}
+            >
+              <div style={{ padding: 8, borderBottom: '1px solid #f1f5f9' }}>
+                <input
+                  placeholder="搜索..."
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                  autoFocus
+                />
+              </div>
+              <div ref={listParentRef} style={{ maxHeight: 220, overflow: 'auto' }}>
+                {filtered.length === 0 && (
+                  <div style={{ padding: '6px 10px', color: '#888', fontSize: 12 }}>无匹配项</div>
+                )}
+                <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
+                  {rowVirtualizer.getVirtualItems().map((vi) => {
+                    const opt = filtered[vi.index];
+                    const isActive = vi.index === activeIndex;
+                    return (
+                      <div
+                        key={opt.id}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onDoubleClick={(e) => { e.stopPropagation(); onChange(opt); setOpen(false); }}
+                        onClick={(e) => { e.stopPropagation(); onChange(opt); setOpen(false); }}
+                        onMouseEnter={() => setActiveIndex(vi.index)}
+                        style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vi.start}px)`, height: vi.size, padding: '8px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, background: isActive ? '#f1f5f9' : 'transparent' }}
+                      >
+                        {showAvatar && (
+                          <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#e2e8f0', color: '#334155', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>
+                            {initials(opt.label)}
+                          </span>
+                        )}
+                        <span>{opt.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
+        </div>
+      );
+    };
+    return <SingleSelectControl val={value} onChange={(v) => onChange(v)} showAvatar={false} />;
+  }
+  if (type === 'multiSelect') {
+    const opts = options ?? initialOptions;
+    const MultiSelectControl: React.FC<{ val: SelectOption[]; onChange: (v: SelectOption[]) => void }> = ({ val, onChange }) => {
+      const [open, setOpen] = useState(false);
+      const containerRef = useRef<HTMLDivElement | null>(null);
+      const panelRef = useRef<HTMLDivElement | null>(null);
+      const listParentRef = useRef<HTMLDivElement | null>(null);
+      const closeTimerRef = useRef<number | null>(null);
+      const scheduleClose = () => {
+        if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = window.setTimeout(() => setOpen(false), 150);
+      };
+      const cancelClose = () => {
+        if (closeTimerRef.current) {
+          window.clearTimeout(closeTimerRef.current);
+          closeTimerRef.current = null;
+        }
+      };
+      const [dropdownPos, setDropdownPos] = useState<{ left: number; top: number; width: number } | null>(null);
+      const updatePos = () => {
+        const el = containerRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        setDropdownPos({ left: Math.round(rect.left), top: Math.round(rect.bottom + 4), width: Math.round(rect.width) });
+      };
+      useEffect(() => {
+        if (open) {
+          updatePos();
+          const handler = () => updatePos();
+          window.addEventListener('scroll', handler, true);
+          window.addEventListener('resize', handler);
+          return () => {
+            window.removeEventListener('scroll', handler, true);
+            window.removeEventListener('resize', handler);
+          };
+        }
+      }, [open]);
+      // 智能翻转定位
+      useEffect(() => {
+        if (!open) return;
+        const t = window.setTimeout(() => {
+          const panel = panelRef.current;
+          const container = containerRef.current;
+          if (!panel || !container) return;
+          const panelRect = panel.getBoundingClientRect();
+          const contRect = container.getBoundingClientRect();
+          const vw = window.innerWidth;
+          const vh = window.innerHeight;
+          let top = contRect.bottom + 4;
+          let left = contRect.left;
+          if (panelRect.bottom > vh && contRect.top - panelRect.height - 4 >= 8) {
+            top = contRect.top - panelRect.height - 4;
+          }
+          if (panelRect.right > vw) {
+            left = Math.max(8, contRect.right - panelRect.width);
+          }
+          setDropdownPos({ left: Math.round(left), top: Math.round(top), width: Math.round(contRect.width) });
+        }, 0);
+        return () => window.clearTimeout(t);
+      }, [open]);
       const selectedIds = new Set((val ?? []).map((v) => v.id));
+      const [query, setQuery] = useState('');
       const available = (opts ?? []).filter((o) => !selectedIds.has(o.id));
+      const filtered = available.filter((o) => o.label.toLowerCase().includes(query.toLowerCase()));
+      const [activeIndex, setActiveIndex] = useState<number>(filtered.length ? 0 : -1);
+      useEffect(() => { setActiveIndex(filtered.length ? 0 : -1); }, [query, available.length]);
+      const rowVirtualizer = useVirtualizer({
+        count: filtered.length,
+        getScrollElement: () => listParentRef.current,
+        estimateSize: () => 30,
+        overscan: 5,
+      });
+      useEffect(() => {
+        if (!open) return;
+        if (activeIndex >= 0) rowVirtualizer.scrollToIndex(activeIndex, { align: 'center' });
+      }, [open, activeIndex]);
+      const addOpt = (opt: SelectOption) => {
+        const next = [ ...(val ?? []), opt ];
+        onChange(next);
+      };
+      const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        e.stopPropagation();
+        if (!open && (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ')) { setOpen(true); return; }
+        if (!open) return;
+        if (e.key === 'Escape') { setOpen(false); return; }
+        if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIndex((i) => Math.min(i + 1, filtered.length - 1)); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIndex((i) => Math.max(i - 1, 0)); }
+        else if (e.key === 'Enter') { e.preventDefault(); if (activeIndex >= 0) addOpt(filtered[activeIndex]); }
+      };
       return (
         <div
           ref={containerRef}
@@ -178,6 +528,7 @@ function CellEditor({ value, onChange, type, options }: {
           onClick={(e) => { e.stopPropagation(); cancelClose(); setOpen(true); }}
           onMouseDown={(e) => e.stopPropagation()}
           onMouseEnter={cancelClose}
+          onKeyDown={onKeyDown}
         >
           {(val ?? []).map((opt) => (
             <span key={opt.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 6px', borderRadius: 12, background: '#eef2ff', color: '#334155', fontSize: '0.9em' }}>
@@ -195,26 +546,45 @@ function CellEditor({ value, onChange, type, options }: {
           ))}
           {open && dropdownPos && createPortal(
             <div
-              style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, minWidth: Math.max(140, dropdownPos.width), maxHeight: 180, overflow: 'auto', marginTop: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, boxShadow: '0 8px 30px rgba(0,0,0,0.12)', zIndex: 10000 }}
+              ref={panelRef}
+              style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, minWidth: Math.max(160, dropdownPos.width), background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, boxShadow: '0 8px 30px rgba(0,0,0,0.12)', zIndex: 10000 }}
               onMouseEnter={cancelClose}
               onMouseLeave={scheduleClose}
             >
-              {available.length === 0 && (
-                <div style={{ padding: '6px 10px', color: '#888', fontSize: 12 }}>无可选项</div>
-              )}
-              {available.map((opt) => (
-                <div key={opt.id}
-                     onDoubleClick={(e) => {
-                       e.stopPropagation();
-                       const next = [ ...(val ?? []), opt ];
-                       onChange(next);
-                       // 保持下拉开启以便连续双击添加
-                     }}
-                     style={{ padding: '6px 10px', cursor: 'pointer' }}
-                     onMouseDown={(e) => e.preventDefault()}>
-                  {opt.label}
+              <div style={{ padding: 8, borderBottom: '1px solid #f1f5f9' }}>
+                <input
+                  placeholder="搜索选项..."
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                  autoFocus
+                />
+              </div>
+              <div ref={listParentRef} style={{ maxHeight: 220, overflow: 'auto' }}>
+                {filtered.length === 0 && (
+                  <div style={{ padding: '6px 10px', color: '#888', fontSize: 12 }}>无匹配项</div>
+                )}
+                <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
+                  {rowVirtualizer.getVirtualItems().map((vi) => {
+                    const opt = filtered[vi.index];
+                    const isActive = vi.index === activeIndex;
+                    return (
+                      <div
+                        key={opt.id}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onDoubleClick={(e) => { e.stopPropagation(); addOpt(opt); }}
+                        onClick={(e) => { e.stopPropagation(); addOpt(opt); }}
+                        onMouseEnter={() => setActiveIndex(vi.index)}
+                        style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vi.start}px)`, height: vi.size, padding: '8px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, background: isActive ? '#f1f5f9' : 'transparent' }}
+                      >
+                        <span>{opt.label}</span>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
+              </div>
             </div>,
             document.body
           )}
@@ -224,17 +594,209 @@ function CellEditor({ value, onChange, type, options }: {
     return <MultiSelectControl val={value ?? []} onChange={(v) => onChange(v)} />;
   }
   if (type === 'relation') {
-    return <input value={value ?? ''} onChange={(e) => onChange(e.target.value)} placeholder="关联记录ID" />;
+    return (
+      <input
+        className="sheet-input"
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="关联记录ID"
+        autoFocus
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      />
+    );
   }
   if (type === 'user') {
-    return (
-      <select value={value?.id ?? ''} onChange={(e) => onChange(mockUsers.find(u => u.id === e.target.value) ?? null)}>
-        <option value="">(空)</option>
-        {mockUsers.map((u) => (
-          <option key={u.id} value={u.id}>{u.name}</option>
-        ))}
-      </select>
-    );
+    const userOptions: SelectOption[] = mockUsers.map((u) => ({ id: u.id, label: u.name }));
+    const SingleSelectControl: React.FC<{ val: SelectOption | null; onChange: (v: SelectOption | null) => void; showAvatar?: boolean }> = ({ val, onChange, showAvatar }) => {
+      const [open, setOpen] = useState(false);
+      const [query, setQuery] = useState('');
+      const containerRef = useRef<HTMLDivElement | null>(null);
+      const panelRef = useRef<HTMLDivElement | null>(null);
+      const listParentRef = useRef<HTMLDivElement | null>(null);
+      const closeTimerRef = useRef<number | null>(null);
+      const scheduleClose = () => {
+        if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = window.setTimeout(() => setOpen(false), 150);
+      };
+      const cancelClose = () => {
+        if (closeTimerRef.current) {
+          window.clearTimeout(closeTimerRef.current);
+          closeTimerRef.current = null;
+        }
+      };
+      const [dropdownPos, setDropdownPos] = useState<{ left: number; top: number; width: number } | null>(null);
+      const updatePos = () => {
+        const el = containerRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        setDropdownPos({ left: Math.round(rect.left), top: Math.round(rect.bottom + 4), width: Math.round(rect.width) });
+      };
+      useEffect(() => {
+        if (open) {
+          updatePos();
+          const handler = () => updatePos();
+          window.addEventListener('scroll', handler, true);
+          window.addEventListener('resize', handler);
+          return () => {
+            window.removeEventListener('scroll', handler, true);
+            window.removeEventListener('resize', handler);
+          };
+        }
+      }, [open]);
+      useEffect(() => {
+        if (!open) return;
+        const t = window.setTimeout(() => {
+          const panel = panelRef.current;
+          const container = containerRef.current;
+          if (!panel || !container) return;
+          const panelRect = panel.getBoundingClientRect();
+          const contRect = container.getBoundingClientRect();
+          const vw = window.innerWidth;
+          const vh = window.innerHeight;
+          let top = contRect.bottom + 4;
+          let left = contRect.left;
+          if (panelRect.bottom > vh && contRect.top - panelRect.height - 4 >= 8) {
+            top = contRect.top - panelRect.height - 4;
+          }
+          if (panelRect.right > vw) {
+            left = Math.max(8, contRect.right - panelRect.width);
+          }
+          setDropdownPos({ left: Math.round(left), top: Math.round(top), width: Math.round(contRect.width) });
+        }, 0);
+        return () => window.clearTimeout(t);
+      }, [open, query]);
+      const filtered = userOptions.filter((o) => (o.label ?? '').toLowerCase().includes(query.toLowerCase()));
+      const [activeIndex, setActiveIndex] = useState<number>(-1);
+      useEffect(() => {
+        if (open) {
+          if (val) {
+            const idx = filtered.findIndex((o) => o.id === val.id);
+            setActiveIndex(idx >= 0 ? idx : (filtered.length > 0 ? 0 : -1));
+          } else {
+            setActiveIndex(filtered.length > 0 ? 0 : -1);
+          }
+        }
+      }, [open, val, query]);
+      const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (!open) {
+          if (e.key === 'ArrowDown' || e.key === 'Enter') {
+            e.preventDefault();
+            cancelClose();
+            setOpen(true);
+          }
+          return;
+        }
+        if (['ArrowDown','ArrowUp','Enter','Escape'].includes(e.key)) e.preventDefault();
+        if (e.key === 'ArrowDown') {
+          setActiveIndex((i) => Math.min((i < 0 ? 0 : i) + 1, filtered.length - 1));
+        } else if (e.key === 'ArrowUp') {
+          setActiveIndex((i) => Math.max((i < 0 ? 0 : i) - 1, 0));
+        } else if (e.key === 'Enter') {
+          if (activeIndex >= 0 && filtered[activeIndex]) {
+            onChange(filtered[activeIndex]);
+            setOpen(false);
+          }
+        } else if (e.key === 'Escape') {
+          setOpen(false);
+        }
+      };
+      const rowVirtualizer = useVirtualizer({
+        count: filtered.length,
+        getScrollElement: () => listParentRef.current,
+        estimateSize: () => 30,
+        overscan: 5,
+      });
+      useEffect(() => {
+        if (!open) return;
+        if (activeIndex >= 0) rowVirtualizer.scrollToIndex(activeIndex, { align: 'center' });
+      }, [open, activeIndex]);
+      const initials = (txt: string) => {
+        const s = (txt || '').trim();
+        if (!s) return '';
+        const parts = s.split(/\s+/);
+        const first = parts[0]?.[0] ?? '';
+        const last = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? '' : '';
+        return (first + last).toUpperCase();
+      };
+      return (
+        <div
+          ref={containerRef}
+          tabIndex={0}
+          style={{ position: 'relative', minHeight: 26, display: 'flex', alignItems: 'center', gap: 6, font: 'inherit' }}
+          onClick={(e) => { e.stopPropagation(); cancelClose(); setOpen(true); }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onMouseEnter={cancelClose}
+          onKeyDown={onKeyDown}
+        >
+          {val ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 18, height: 18, borderRadius: '50%', background: '#e2e8f0', color: '#334155', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>
+                {initials(val.label)}
+              </span>
+              <span>{val.label}</span>
+              <button
+                title="清除"
+                onClick={(e) => { e.stopPropagation(); onChange(null); }}
+                style={{ border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer' }}
+              >×</button>
+            </span>
+          ) : (
+            <span style={{ color: '#94a3b8' }}>（空）</span>
+          )}
+          {open && dropdownPos && createPortal(
+            <div
+              ref={panelRef}
+              style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, minWidth: Math.max(160, dropdownPos.width), background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, boxShadow: '0 8px 30px rgba(0,0,0,0.12)', zIndex: 10000 }}
+              onMouseEnter={cancelClose}
+              onMouseLeave={scheduleClose}
+            >
+              <div style={{ padding: 8, borderBottom: '1px solid #f1f5f9' }}>
+                <input
+                  placeholder="搜索用户..."
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                  autoFocus
+                />
+              </div>
+              <div ref={listParentRef} style={{ maxHeight: 220, overflow: 'auto' }}>
+                {filtered.length === 0 && (
+                  <div style={{ padding: '6px 10px', color: '#888', fontSize: 12 }}>无匹配项</div>
+                )}
+                <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
+                  {rowVirtualizer.getVirtualItems().map((vi) => {
+                    const opt = filtered[vi.index];
+                    const isActive = vi.index === activeIndex;
+                    return (
+                      <div
+                        key={opt.id}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onDoubleClick={(e) => { e.stopPropagation(); onChange(opt); setOpen(false); }}
+                        onClick={(e) => { e.stopPropagation(); onChange(opt); setOpen(false); }}
+                        onMouseEnter={() => setActiveIndex(vi.index)}
+                        style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vi.start}px)`, height: vi.size, padding: '8px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, background: isActive ? '#f1f5f9' : 'transparent' }}
+                      >
+                        <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#e2e8f0', color: '#334155', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>
+                          {initials(opt.label)}
+                        </span>
+                        <span>{opt.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
+        </div>
+      );
+    };
+    const current = value ? userOptions.find((o) => o.id === value.id) ?? null : null;
+    return <SingleSelectControl val={current} onChange={(v) => onChange(v ? { id: v.id, name: v.label } as any : null)} showAvatar />;
   }
   return <span />;
 }
@@ -242,6 +804,7 @@ function CellEditor({ value, onChange, type, options }: {
 export default function App() {
   const { show } = useToast();
   const [activeNav, setActiveNav] = useState<string>('table');
+  const [activeTableId, setActiveTableId] = useState<string>('tbl-1');
 
   const [views, setViews] = useState<View[]>([
     { id: 'view-1', name: '视图1', protect: 'public' },
@@ -251,12 +814,8 @@ export default function App() {
   const [protectOpen, setProtectOpen] = useState(false);
 
   const [rowHeight, setRowHeight] = useState<'low' | 'medium' | 'high' | 'xhigh'>('medium');
-
-  const [data, setData] = useState<RowRecord[]>(() => generateMockRows(200));
-  const [sorting, setSorting] = useState<SortingState>([]);
   const [freezeCount, setFreezeCount] = useState<number>(0);
   const colWidth = 160;
-  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
   const [fieldDrawerOpen, setFieldDrawerOpen] = useState(false);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -274,8 +833,88 @@ export default function App() {
     relation: { name: '关联', type: 'text', description: '' },
     user: { name: '用户', type: 'user', description: '' },
   };
-  const [columnMeta, setColumnMeta] = useState<Record<string, { name: string; type: string; description?: string; options?: SelectOption[]; formula?: FormulaConfig; format?: NumberFormat }>>(initialColumnMeta);
-  const [columnOrder, setColumnOrder] = useState<string[]>(Object.keys(initialColumnMeta));
+  // 表级状态映射，支持不同数据表切换加载各自结构与数据
+  type TableState = {
+    data: RowRecord[];
+    columnMeta: Record<string, { name: string; type: string; description?: string; options?: SelectOption[]; formula?: FormulaConfig; format?: NumberFormat }>;
+    columnOrder: string[];
+    columnVisibility: Record<string, boolean>;
+    sorting: SortingState;
+  };
+  const [tables, setTables] = useState<Record<string, TableState>>(() => ({
+    'tbl-1': {
+      data: generateMockRows(200),
+      columnMeta: initialColumnMeta,
+      columnOrder: Object.keys(initialColumnMeta),
+      columnVisibility: {},
+      sorting: [],
+    },
+  }));
+  const currentTable: TableState = tables[activeTableId] ?? tables['tbl-1'];
+  const data = currentTable.data;
+  const columnMeta = currentTable.columnMeta;
+  const columnOrder = currentTable.columnOrder;
+  const columnVisibility = currentTable.columnVisibility;
+  const sorting = currentTable.sorting;
+
+  // 包装器：以当前 activeTableId 更新表级状态
+  const setData = (updater: React.SetStateAction<RowRecord[]>) => {
+    setTables(prev => {
+      const id = activeTableId in prev ? activeTableId : 'tbl-1';
+      const curr = prev[id];
+      const nextData = typeof updater === 'function' ? (updater as (d: RowRecord[]) => RowRecord[])(curr.data) : updater;
+      return { ...prev, [id]: { ...curr, data: nextData } };
+    });
+  };
+  const setColumnMeta = (updater: React.SetStateAction<Record<string, { name: string; type: string; description?: string; options?: SelectOption[]; formula?: FormulaConfig; format?: NumberFormat }>>) => {
+    setTables(prev => {
+      const id = activeTableId in prev ? activeTableId : 'tbl-1';
+      const curr = prev[id];
+      const next = typeof updater === 'function' ? (updater as (m: typeof curr.columnMeta) => typeof curr.columnMeta)(curr.columnMeta) : updater;
+      return { ...prev, [id]: { ...curr, columnMeta: next } };
+    });
+  };
+  const setColumnOrder = (updater: React.SetStateAction<string[]>) => {
+    setTables(prev => {
+      const id = activeTableId in prev ? activeTableId : 'tbl-1';
+      const curr = prev[id];
+      const next = typeof updater === 'function' ? (updater as (o: string[]) => string[])(curr.columnOrder) : updater;
+      return { ...prev, [id]: { ...curr, columnOrder: next } };
+    });
+  };
+  const setColumnVisibility = (updater: React.SetStateAction<Record<string, boolean>>) => {
+    setTables(prev => {
+      const id = activeTableId in prev ? activeTableId : 'tbl-1';
+      const curr = prev[id];
+      const next = typeof updater === 'function' ? (updater as (v: Record<string, boolean>) => Record<string, boolean>)(curr.columnVisibility) : updater;
+      return { ...prev, [id]: { ...curr, columnVisibility: next } };
+    });
+  };
+  const setSorting = (updater: React.SetStateAction<SortingState>) => {
+    setTables(prev => {
+      const id = activeTableId in prev ? activeTableId : 'tbl-1';
+      const curr = prev[id];
+      const next = typeof updater === 'function' ? (updater as (s: SortingState) => SortingState)(curr.sorting) : updater;
+      return { ...prev, [id]: { ...curr, sorting: next } };
+    });
+  };
+
+  // 当切换到新的表 ID 时，初始化其默认结构与数据
+  useEffect(() => {
+    setTables(prev => {
+      if (activeTableId in prev) return prev;
+      return {
+        ...prev,
+        [activeTableId]: {
+          data: generateMockRows(100),
+          columnMeta: initialColumnMeta,
+          columnOrder: Object.keys(initialColumnMeta),
+          columnVisibility: {},
+          sorting: [],
+        },
+      };
+    });
+  }, [activeTableId]);
   const [columnColors, setColumnColors] = useState<Record<string, string>>({});
   // 选中单元格：仅选中时进入编辑态，其它保持展示态
   const [selectedCell, setSelectedCell] = useState<{ rowId: string | null; columnId: string | null }>({ rowId: null, columnId: null });
@@ -660,7 +1299,7 @@ export default function App() {
 
   return (
     <div style={{ display: 'flex' }}>
-      <Sidebar active={activeNav} onNavigate={setActiveNav} />
+      <Sidebar active={activeNav} onNavigate={setActiveNav} onSelectTable={setActiveTableId} />
 
       <div style={{ flex: 1, minWidth: 0, height: '100vh', display: 'flex', flexDirection: 'column' }}>
         {/* 顶部：视图标签 */}
@@ -702,10 +1341,10 @@ export default function App() {
         {/* 内容区 */}
         <div style={{ padding: 12, overflow: 'hidden', flex: 1 }}>
           {activeNav === 'table' && (
-            <div data-app-ready="1">
+            <div data-app-ready="1" style={{ overflowX: 'auto' }}>
               <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns.length + 1}, ${colWidth}px)`, gap: 4, fontWeight: 600, borderBottom: '1px solid #ddd', paddingBottom: 6 }}>
                   {table.getFlatHeaders().map((header, idx) => (
-                    <div key={header.id} onClick={header.column.getToggleSortingHandler()} style={{ cursor: 'pointer', position: idx < freezeCount ? 'sticky' : 'static', left: idx < freezeCount ? `${idx * colWidth}px` : undefined, zIndex: idx < freezeCount ? 5 : 1, background: idx < freezeCount ? '#f7faff' : undefined }}>
+                    <div key={header.id} onClick={header.column.getToggleSortingHandler()} style={{ cursor: 'pointer', position: idx < freezeCount ? 'sticky' : 'static', left: idx < freezeCount ? `${idx * colWidth}px` : undefined, zIndex: idx < freezeCount ? 5 : 1, background: idx < freezeCount ? '#f7faff' : undefined, width: `${colWidth}px` }}>
                       {flexRender(header.column.columnDef.header, header.getContext())}
                       {{ asc: ' ▲', desc: ' ▼' }[header.column.getIsSorted() as 'asc' | 'desc'] ?? ''}
                       <HeaderMenu
@@ -755,7 +1394,7 @@ export default function App() {
               <div
                 ref={parentRef}
                 className="sheet-grid"
-                style={{ height: 'calc(100vh - 220px)', overflow: 'auto', position: 'relative', border: '1px solid #eee', marginTop: 8 }}
+                style={{ height: 'calc(100vh - 220px)', overflowY: 'auto', position: 'relative', border: '1px solid #eee', marginTop: 8, minWidth: `${(columns.length + 1) * colWidth}px` }}
                 tabIndex={0}
                 onKeyDown={onKeyDown}
                 onMouseUp={() => { setIsDragging(false); }}

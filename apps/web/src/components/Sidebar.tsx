@@ -4,6 +4,7 @@ import { IconPlus, IconTask, IconTable, IconMore, IconChevronDown, IconChevronRi
 type Props = {
   active: string;
   onNavigate: (key: string) => void;
+  onSelectTable?: (tableId: string) => void;
 };
 
 type DataTable = { id: string; name: string; description: string };
@@ -159,7 +160,7 @@ const Modal: React.FC<{ open: boolean; title: string; children: React.ReactNode;
   );
 };
 
-export const Sidebar: React.FC<Props> = ({ active, onNavigate }) => {
+export const Sidebar: React.FC<Props> = ({ active, onNavigate, onSelectTable }) => {
   const [projects, setProjects] = useState<Project[]>([{
     id: 'p-1', name: '项目A', tasks: [
       { id: 't-1', name: '任务A-1', tables: [{ id: 'tbl-1', name: '数据表1', description: '示例数据表' }] }
@@ -168,6 +169,8 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate }) => {
   // 组件状态：展开
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({ 'p-1': true });
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({ 't-1': true });
+  // 当前选中的数据表ID（用于高亮与独立选中）
+  const [activeTableId, setActiveTableId] = useState<string | null>('tbl-1');
   
   // 新建弹窗所需状态
   const [composeOpen, setComposeOpen] = useState(false);
@@ -207,12 +210,17 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate }) => {
     } else if (composeType === 'table') {
       if (!composeProjectId || !composeTaskId) { window.alert('请选择所属项目和任务'); return; }
       const description = composeDesc.trim();
+      const targetTask = projects.find(p => p.id === composeProjectId)?.tasks.find(t => t.id === composeTaskId);
+      const newId = `tbl-${(targetTask?.tables.length ?? 0) + 1}-${Date.now()}`;
       setProjects(prev => prev.map(p => p.id === composeProjectId ? {
         ...p,
-        tasks: p.tasks.map(t => t.id === composeTaskId ? { ...t, tables: [...t.tables, { id: `tbl-${t.tables.length + 1}-${Date.now()}`, name, description }] } : t)
+        tasks: p.tasks.map(t => t.id === composeTaskId ? { ...t, tables: [...t.tables, { id: newId, name, description }] } : t)
       } : p));
       setExpandedProjects(e => ({ ...e, [composeProjectId]: true }));
       setExpandedTasks(e => ({ ...e, [composeTaskId]: true }));
+      setActiveTableId(newId);
+      onNavigate('table');
+      onSelectTable?.(newId);
     } else if (composeType === 'collect') {
       const id = `collect-${collects.length + 1}-${Date.now()}`;
       setCollects(prev => [...prev, { id, name }]);
@@ -248,12 +256,17 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate }) => {
     const name = (window.prompt('请输入数据表名称') || '').trim();
     if (!name) return;
     const description = (window.prompt('请输入数据表简介') || '').trim();
+    const task = projects.find(p => p.id === projectId)?.tasks.find(t => t.id === taskId);
+    const newId = `tbl-${(task?.tables.length ?? 0) + 1}-${Date.now()}`;
     setProjects((prev) => prev.map(p => p.id === projectId ? {
       ...p,
-      tasks: p.tasks.map(t => t.id === taskId ? { ...t, tables: [...t.tables, { id: `tbl-${t.tables.length + 1}-${Date.now()}`, name, description }] } : t)
+      tasks: p.tasks.map(t => t.id === taskId ? { ...t, tables: [...t.tables, { id: newId, name, description }] } : t)
     } : p));
     setExpandedProjects((e) => ({ ...e, [projectId]: true }));
     setExpandedTasks((e) => ({ ...e, [taskId]: true }));
+    setActiveTableId(newId);
+    onNavigate('table');
+    onSelectTable?.(newId);
   };
 
   const renameProject = (projectId: string) => {
@@ -300,6 +313,10 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate }) => {
         return { ...t, tables: [...t.tables, copy] };
       })
     } : p));
+    const newId = `${tableId}-copy-${Date.now()}`;
+    setActiveTableId(newId);
+    onNavigate('table');
+    onSelectTable?.(newId);
   };
 
   const deleteTable = (projectId: string, taskId: string, tableId: string) => {
@@ -307,6 +324,7 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate }) => {
       ...p,
       tasks: p.tasks.map(t => t.id === taskId ? { ...t, tables: t.tables.filter(tb => tb.id !== tableId) } : t)
     } : p));
+    setActiveTableId(prev => (prev === tableId ? null : prev));
   };
 
   // 专业栏：重命名/复制/删除处理函数
@@ -414,8 +432,8 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate }) => {
                           <Row
                             key={tb.id}
                             label={tb.name}
-                            active={active === 'table'}
-                            onClick={() => onNavigate('table')}
+                            active={activeTableId === tb.id}
+                            onClick={() => { setActiveTableId(tb.id); onNavigate('table'); onSelectTable?.(tb.id); }}
                             trailing={(
                               <>
                                 <Menu items={[

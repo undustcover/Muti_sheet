@@ -87,7 +87,19 @@
 }
 
 .sheet-cell.frozen-shadow {
-  box-shadow: 6px 0 10px -6px rgba(0,0,0,0.08);
+  box-shadow: 12px 0 16px -12px rgba(0,0,0,0.16);
+  border-right: 1px solid #e5e7eb;
+}
+
+.sheet-cell.frozen-shadow::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  pointer-events: none;
+  background: linear-gradient(to right, rgba(0,0,0,0.08), rgba(0,0,0,0));
 }
 
 .sheet-header-menu {
