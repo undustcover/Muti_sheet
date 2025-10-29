@@ -494,7 +494,7 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate, onSelectTable }) 
     <Row label={<span>新建文件夹</span>} onClick={() => openCompose('folder')} />
   </div>
     
-    <div style={{ marginTop: 'auto', padding: 12, fontSize: 12, color: '#8a8a8a' }}>仿飞书 · UI原型</div>
+    <div style={{ marginTop: 'auto', padding: 12, fontSize: 12, color: '#8a8a8a' }}>HugoXu · 技术支持</div>
     <Modal
       open={composeOpen}
       title={composeType === 'project' ? '新建项目' : composeType === 'task' ? '新建任务' : composeType === 'table' ? '新建数据表' : composeType === 'collect' ? '新建收集表' : composeType === 'dashboard' ? '新建仪表盘' : composeType === 'folder' ? '新建文件夹' : ''}

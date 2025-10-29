@@ -26,6 +26,8 @@ type Props = {
   freezeCount: number;
   onFreezeTo: (n: number) => void;
   colWidth: number;
+  colWidths: Record<string, number>;
+  setColWidths: (updater: Record<string, number> | ((prev: Record<string, number>) => Record<string, number>)) => void;
   defaultSelectOptions?: SelectOption[];
   getCellBg: (row: RowRecord, columnId: string) => string | undefined;
   selectedCell: { rowId: string | null; columnId: string | null };
@@ -59,6 +61,8 @@ const DataTable = forwardRef<DataTableHandle, Props>(({
   freezeCount,
   onFreezeTo,
   colWidth,
+  colWidths,
+  setColWidths,
   defaultSelectOptions,
   getCellBg,
   selectedCell,
@@ -128,9 +132,10 @@ const DataTable = forwardRef<DataTableHandle, Props>(({
   const table = useReactTable({
     data: rows,
     columns,
-    state: { sorting, columnVisibility },
+    state: { sorting, columnVisibility, columnOrder },
     onSortingChange: setSorting,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnOrderChange: setColumnOrder,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
@@ -159,6 +164,68 @@ const DataTable = forwardRef<DataTableHandle, Props>(({
     measure: () => { try { rowVirtualizer.measure(); } catch {} },
   }), [rowVirtualizer]);
 
+  // 行号列宽与每列宽度（可拖拽调整）
+const [indexColWidth, setIndexColWidth] = useState<number>(26);
+  const getColWidth = (cid: string) => (colWidths[cid] ?? colWidth);
+  // 统一使用来自 props 的顺序与可见性，避免错位
+  const headerIds = useMemo(() => (
+    columnOrder.filter((id) => !!columnMeta[id] && columnVisibility[id] !== false)
+  ), [columnOrder, columnMeta, columnVisibility]);
+  const totalWidth = useMemo(() => (
+    indexColWidth + headerIds.reduce((sum, cid) => sum + getColWidth(cid), 0) + colWidth
+  ), [indexColWidth, headerIds, colWidths, colWidth]);
+  const templateColumns = useMemo(() => (
+    `${indexColWidth}px ` + headerIds.map((cid) => `${getColWidth(cid)}px`).join(' ') + ` ${colWidth}px`
+  ), [indexColWidth, headerIds, colWidths, colWidth]);
+  const computeStickyLeft = (idx: number) => {
+    // idx 为可见列在表头中的索引（不含行号列）
+    // 采用纯列宽累加；边框在 border-box 内，不再额外计算，避免每列+1px的累计误差
+    let left = indexColWidth;
+    for (let i = 0; i < idx; i++) {
+      left += getColWidth(headerIds[i]);
+    }
+    return left;
+  };
+  // 新增字段：自动加入列顺序并设为可见
+  useEffect(() => {
+    const idsInMeta = Object.keys(columnMeta || {});
+    const setKnown = new Set(columnOrder);
+    const toAdd = idsInMeta.filter((id) => !setKnown.has(id));
+    if (toAdd.length > 0) {
+      setColumnOrder((prev) => [...prev, ...toAdd]);
+    }
+    // 默认可见
+    if (toAdd.length > 0) {
+      const nextVis = { ...columnVisibility } as any;
+      let changed = false;
+      toAdd.forEach((id) => {
+        if (nextVis[id] === undefined) { nextVis[id] = true; changed = true; }
+      });
+      if (changed) { try { setColumnVisibility(nextVis); } catch {} }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [columnMeta]);
+  // 列宽改为受控，由 App 负责持久化到视图配置
+
+  // 列宽拖拽逻辑
+  const startResize = (cid: string, startX: number) => {
+    const initial = getColWidth(cid);
+    const onMove = (e: MouseEvent) => {
+      const delta = e.clientX - startX;
+      const next = Math.max(60, initial + delta);
+      setColWidths((prev) => ({ ...prev, [cid]: next }));
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove as any);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove as any);
+    window.addEventListener('mouseup', onUp, { once: true });
+  };
+  // 拖拽手柄悬停时高亮分隔线
+  const [hoverResizeCid, setHoverResizeCid] = useState<string | null>(null);
+  const [headerSelectedCid, setHeaderSelectedCid] = useState<string | null>(null);
+
   const moveSelection = (dRow: number, dCol: number) => {
     const rowsModel = table.getRowModel().rows;
     const cols = columns;
@@ -178,8 +245,66 @@ const DataTable = forwardRef<DataTableHandle, Props>(({
     // 复制：Ctrl+C 导出为 TSV（仅文本/数字/日期列，其它为空）
     if (e.ctrlKey && String(e.key).toLowerCase() === 'c') {
       e.preventDefault();
-      // 若存在选区，交由全局 copy 事件处理，避免重复 toast
-      if (selectionRange.start && selectionRange.end) return;
+      // 若存在选区，直接在此处生成 TSV 并写入剪贴板（更稳健）
+      if (selectionRange.start && selectionRange.end) {
+        try {
+          const visibleColumnIds = columnOrder.filter((id) => !!columnMeta[id] && columnVisibility[id] !== false);
+          const toText = (v: any) => (v === null || v === undefined) ? '' : String(v);
+          const isNumCol = (cid: string) => columnMeta[cid]?.type === 'number';
+          const isTextCol = (cid: string) => columnMeta[cid]?.type === 'text';
+          const isDateCol = (cid: string) => columnMeta[cid]?.type === 'date';
+          const rowsModel = table.getRowModel().rows;
+          const r1 = Math.min(selectionRange.start!.row, selectionRange.end!.row);
+          const r2 = Math.max(selectionRange.start!.row, selectionRange.end!.row);
+          const c1 = Math.min(selectionRange.start!.col, selectionRange.end!.col);
+          const c2 = Math.max(selectionRange.start!.col, selectionRange.end!.col);
+          const selectedColIds = visibleColumnIds.slice(c1, c2 + 1);
+          const rowsTsv = rowsModel.slice(r1, r2 + 1).map((row) => (
+            selectedColIds.map((cid) => {
+              if (isNumCol(cid)) {
+                const n = (row.original as any)[cid];
+                return (typeof n === 'number') ? String(n) : '';
+              }
+              if (isTextCol(cid)) {
+                return toText((row.original as any)[cid]);
+              }
+              if (isDateCol(cid)) {
+                const d = (row.original as any)[cid];
+                try {
+                  const dt = d ? new Date(d) : null;
+                  return (dt && !isNaN(dt.getTime())) ? dt.toISOString().slice(0, 10) : '';
+                } catch { return ''; }
+              }
+              return '';
+            }).join('\t')
+          )).join('\n');
+          const copyViaClipboard = async (text: string) => {
+            if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+              await navigator.clipboard.writeText(text);
+              return true;
+            }
+            try {
+              const ta = document.createElement('textarea');
+              ta.value = text;
+              ta.style.position = 'fixed';
+              ta.style.opacity = '0';
+              ta.style.pointerEvents = 'none';
+              document.body.appendChild(ta);
+              ta.focus();
+              ta.select();
+              const ok = document.execCommand('copy');
+              document.body.removeChild(ta);
+              return ok;
+            } catch { return false; }
+          };
+          void copyViaClipboard(rowsTsv);
+          const countRows = (r2 - r1 + 1);
+          const countCols = selectedColIds.length;
+          setCopyToast({ show: true, count: countRows * countCols });
+          window.setTimeout(() => { setCopyToast((prev: any) => (prev?.show ? { show: false, count: prev.count } : prev)); }, 1500);
+        } catch {}
+        return;
+      }
       try {
         const visibleColumnIds = columnOrder.filter((id) => !!columnMeta[id] && columnVisibility[id] !== false);
         const toText = (v: any) => (v === null || v === undefined) ? '' : String(v);
@@ -194,6 +319,10 @@ const DataTable = forwardRef<DataTableHandle, Props>(({
         const selectedColIds = visibleColumnIds.slice(c1, c2 + 1);
         const rowsTsv = rowsModel.slice(r1, r2 + 1).map((row) => (
           selectedColIds.map((cid) => {
+            if (cid === 'id') {
+              const v = (row.original as any)[cid] ?? row.original.id;
+              return toText(v);
+            }
             if (isNumCol(cid)) {
               const n = (row.original as any)[cid];
               return (typeof n === 'number') ? String(n) : '';
@@ -211,7 +340,26 @@ const DataTable = forwardRef<DataTableHandle, Props>(({
             return '';
           }).join('\t')
         )).join('\n');
-        void navigator.clipboard?.writeText(rowsTsv);
+        const copyViaClipboard = async (text: string) => {
+          if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            await navigator.clipboard.writeText(text);
+            return true;
+          }
+          try {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            ta.style.pointerEvents = 'none';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            const ok = document.execCommand('copy');
+            document.body.removeChild(ta);
+            return ok;
+          } catch { return false; }
+        };
+        void copyViaClipboard(rowsTsv);
       } catch {}
       return;
     }
@@ -311,7 +459,8 @@ const DataTable = forwardRef<DataTableHandle, Props>(({
         setColumnMeta((prev) => ({ ...prev, [cid]: { name, type } }));
         setColumnOrder((order) => [...order, cid]);
         setColumnVisibility((vis) => ({ ...vis, [cid]: true }));
-        setData((prev) => prev.map((r) => ({ ...r, [cid]: allNum ? 0 : (allDate ? new Date().toISOString() : (allTime ? '00:00:00' : '')) })));
+        // 不在创建新列时为所有行填充默认值，避免时间列被自动填满；
+        // 粘贴循环会为目标范围行赋值，其他行保持为空。
       }
     }
 
@@ -404,6 +553,10 @@ const DataTable = forwardRef<DataTableHandle, Props>(({
         const selectedColIds = visibleColumnIds.slice(c1, c2 + 1);
         const rowsTsv = rowsModel.slice(r1, r2 + 1).map((row) => (
           selectedColIds.map((cid) => {
+            if (cid === 'id') {
+              const v = (row.original as any)[cid] ?? row.original.id;
+              return toText(v);
+            }
             if (isNumCol(cid)) {
               const n = (row.original as any)[cid];
               return (typeof n === 'number') ? String(n) : '';
@@ -447,6 +600,15 @@ const DataTable = forwardRef<DataTableHandle, Props>(({
         tabIndex={0}
         onKeyDown={onKeyDown}
         onPaste={handlePaste}
+        onMouseDown={(e) => {
+          const el = e.target as HTMLElement;
+          const isHeaderCell = !!el.closest('.sheet-header-cell');
+          const isDataCell = !!el.closest('.sheet-cell');
+          if (!isHeaderCell && !isDataCell) {
+            setHeaderSelectedCid(null);
+            setSelectionRange({ start: null, end: null });
+          }
+        }}
         onMouseUp={() => { setIsDragging(false); }}
       >
         {/* 表头放入与数据同一滚动容器，并置顶粘性，避免双滚动条不同步 */}
@@ -455,79 +617,123 @@ const DataTable = forwardRef<DataTableHandle, Props>(({
           top: 0,
           background: '#fff',
           display: 'grid',
-          gridTemplateColumns: `repeat(${columns.length + 1}, ${colWidth}px)`,
-          gap: 4,
+          gridTemplateColumns: templateColumns,
+          gap: 0,
           fontWeight: 600,
           borderBottom: '1px solid #ddd',
-          paddingBottom: 6,
+          paddingBottom: 2,
           zIndex: 10,
           // 设定最小宽度以在页面上出现底部横向滑块
-          minWidth: `${(columns.length + 1) * colWidth}px`
+          minWidth: `${totalWidth}px`
         }}>
-          {table.getFlatHeaders().map((header, idx) => (
-            <div
-              key={header.id}
-              draggable={idx !== 0}
-              onDragStart={(e) => {
-                if (idx === 0) return;
-                setDragSourceId(header.column.id);
-                try { e.dataTransfer.setData('text/plain', header.column.id); } catch {}
-              }}
-              onDragOver={(e) => {
-                if (idx === 0) return;
-                e.preventDefault();
-              }}
-              onDrop={(e) => {
-                if (idx === 0) return;
-                e.preventDefault();
-                const srcId = dragSourceId || e.dataTransfer.getData('text/plain');
-                const dstId = header.column.id;
-                if (!srcId || !dstId || srcId === dstId || srcId === 'id' || dstId === 'id') return;
-                setColumnOrder((prev) => {
-                  const arr = prev.filter((cid) => cid !== srcId);
-                  const dstIdx = arr.indexOf(dstId);
-                  const insertIdx = dstIdx < 0 ? arr.length : dstIdx;
-                  const next = [...arr.slice(0, insertIdx), srcId, ...arr.slice(insertIdx)];
-                  return next;
-                });
-                setDragSourceId(null);
-              }}
-              style={{
-                cursor: (idx !== 0) ? 'grab' : 'default',
-                position: (idx < freezeCount) ? 'sticky' : 'static',
-                left: (idx < freezeCount) ? `${idx * colWidth}px` : undefined,
-                zIndex: (idx < freezeCount) ? 11 : 1,
-                background: (idx < freezeCount) ? '#f7faff' : undefined,
-                width: `${colWidth}px`
-              }}
-            >
-              {flexRender(header.column.columnDef.header, header.getContext())}
-              {{ asc: ' ▲', desc: ' ▼' }[header.column.getIsSorted() as 'asc' | 'desc'] ?? ''}
-              <HeaderMenu
-                columnId={header.column.id}
-                index={idx}
-                disabled={false}
-                disableHide={header.column.id === 'id'}
-                disableDelete={header.column.id === 'id' || isFirstVisibleField(header.column.id, columnOrder, columnVisibility)}
-                onFreezeTo={(n) => onFreezeTo(n)}
-                onSortAsc={(id) => setSorting([{ id, desc: false }])}
-                onSortDesc={(id) => setSorting([{ id, desc: true }])}
-                onEditField={onEditField}
-                onHideField={onHideField}
-                onDeleteField={onDeleteField}
-                onInsertLeft={onInsertLeft}
-                onInsertRight={onInsertRight}
-                onDuplicateField={onDuplicateField}
-                onFillColorColumn={onFillColorColumn}
-              />
-            </div>
-          ))}
+          {/* 行号列表头空白占位（隐藏标题，仅保证栅格对齐）*/}
+          <div
+            style={{
+              position: 'sticky',
+              left: 0,
+              zIndex: 12,
+              background: '#f7faff',
+              width: `${indexColWidth}px`,
+              color: '#999',
+              cursor: 'default',
+              userSelect: 'none',
+              borderRight: '1px solid #eee',
+              boxSizing: 'border-box',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          />
+          {(function() {
+            const flatHeaders = table.getFlatHeaders();
+            return headerIds.map((cid) => {
+              const header = flatHeaders.find((h) => h.column.id === cid);
+              const hIdx = headerIds.indexOf(cid);
+              const isFrozen = hIdx >= 0 && hIdx < freezeCount;
+              const isSelected = headerSelectedCid === cid;
+              return (
+                <div
+                  key={header?.id ?? cid}
+                  className="sheet-header-cell"
+                  draggable={isSelected}
+                  onClick={() => setHeaderSelectedCid(cid)}
+                  onDragStart={(e) => {
+                    if (!isSelected) return;
+                    setDragSourceId(cid);
+                    try { e.dataTransfer.setData('text/plain', cid); } catch {}
+                  }}
+                  onDragOver={(e) => { e.preventDefault(); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const srcId = headerSelectedCid || dragSourceId || e.dataTransfer.getData('text/plain');
+                    const dstId = cid;
+                    if (!srcId || !dstId || srcId === dstId || srcId === 'id' || dstId === 'id') return;
+                    setColumnOrder((prev) => {
+                      const arr = prev.filter((x) => x !== srcId);
+                      const dstIdx = arr.indexOf(dstId);
+                      const insertIdx = dstIdx < 0 ? arr.length : dstIdx;
+                      const next = [...arr.slice(0, insertIdx), srcId, ...arr.slice(insertIdx)];
+                      return next;
+                    });
+                    setDragSourceId(null);
+                  }}
+                  style={{
+                    cursor: isSelected ? 'grab' : 'default',
+                    position: isFrozen ? 'sticky' : 'relative',
+                    left: isFrozen ? `${computeStickyLeft(hIdx)}px` : undefined,
+                    zIndex: isFrozen ? 11 : 1,
+                    background: isSelected ? 'rgba(31, 111, 235, 0.15)' : (isFrozen ? '#f7faff' : undefined),
+                    width: `${getColWidth(cid)}px`,
+                    borderRight: `1px solid ${hoverResizeCid === cid ? '#1f6feb' : '#eee'}`,
+                    boxSizing: 'border-box',
+                    outline: undefined,
+                  }}
+                >
+                  <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 6, padding: '0 6px', boxSizing: 'border-box' }}>
+                    <span style={{ flex: '1 1 auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13 }}>
+                      {header ? flexRender(header.column.columnDef.header, header.getContext()) : (columnMeta[cid]?.name ?? cid)}
+                      {(() => {
+                        const sorted = header ? (header.column.getIsSorted() as 'asc' | 'desc' | false) : (sorting?.find((s) => s && s.id === cid) ? ((sorting.find((s) => s && s.id === cid)!.desc ? 'desc' : 'asc') as 'asc' | 'desc') : false);
+                        return ({ asc: ' ▲', desc: ' ▼' }[sorted as 'asc' | 'desc'] ?? '');
+                      })()}
+                    </span>
+                    <HeaderMenu
+                      columnId={cid}
+                      index={hIdx}
+                      disabled={false}
+                      disableHide={cid === 'id'}
+                      disableDelete={cid === 'id' || isFirstVisibleField(cid, columnOrder, columnVisibility)}
+                      onFreezeTo={(n) => onFreezeTo(n)}
+                      onSortAsc={(id) => setSorting([{ id, desc: false }])}
+                      onSortDesc={(id) => setSorting([{ id, desc: true }])}
+                      onEditField={onEditField}
+                      onHideField={onHideField}
+                      onDeleteField={onDeleteField}
+                      onInsertLeft={onInsertLeft}
+                      onInsertRight={onInsertRight}
+                      onDuplicateField={onDuplicateField}
+                      onFillColorColumn={onFillColorColumn}
+                    />
+                  </div>
+                  {/* 列宽拖拽手柄 */}
+                  <div
+                    onMouseDown={(e) => { e.stopPropagation(); startResize(cid, e.clientX); }}
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseEnter={() => setHoverResizeCid(cid)}
+                    onMouseLeave={() => setHoverResizeCid((prev) => (prev === cid ? null : prev))}
+                    style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 10, cursor: 'col-resize', background: hoverResizeCid === cid ? '#1f6feb' : 'transparent', zIndex: 12 }}
+                    title="拖拽调整列宽"
+                  />
+                </div>
+              );
+            });
+          })()}
           {/* 新建字段按钮 - 最右侧 */}
           <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
             <span role="button" title="新建字段" onClick={onCreateField} style={{ display: 'inline-flex', alignItems: 'center', padding: '4px' }}>+</span>
           </div>
         </div>
-        <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative', minWidth: `${(columns.length + 1) * colWidth}px` }}>
+        <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative', minWidth: `${totalWidth}px` }}>
           {rowVirtualizer.getVirtualItems().map((virtualRow) => {
             const row = table.getRowModel().rows[virtualRow.index]!;
             return (
@@ -535,44 +741,83 @@ const DataTable = forwardRef<DataTableHandle, Props>(({
                 key={row.id}
                 data-index={virtualRow.index}
                 className="sheet-grid-row"
-                style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${virtualRow.start}px)`, display: 'grid', gridTemplateColumns: `repeat(${columns.length + 1}, ${colWidth}px)`, minWidth: `${(columns.length + 1) * colWidth}px` }}
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${virtualRow.start}px)`, display: 'grid', gridTemplateColumns: templateColumns, minWidth: `${totalWidth}px`, borderBottom: '1px solid #eee' }}
               >
-                {row.getVisibleCells().map((cell, cIdx) => (
-                  <div
-                    key={cell.id}
-                    className={`sheet-cell${cIdx < freezeCount ? ' frozen' : ''}${cIdx === freezeCount - 1 ? ' frozen-shadow' : ''}${(selectedCell.rowId === row.original.id && selectedCell.columnId === cell.column.id) ? ' is-selected' : ''}${isInRange(virtualRow.index, cIdx) ? ' is-range' : ''}`}
-                    style={{
-                      position: (cIdx < freezeCount) ? 'sticky' : 'static',
-                      left: (cIdx < freezeCount) ? `${cIdx * colWidth}px` : undefined,
-                      zIndex: (cIdx < freezeCount) ? 3 : 1,
-                      background: (cIdx < freezeCount) ? '#fff' : getCellBg(row.original, cell.column.id)
-                    }}
-                    onClick={() => {
-                      const isEditingThis = editingCell.rowId === row.original.id && editingCell.columnId === cell.column.id;
-                      if (isEditingThis) return;
-                      setSelectedCell({ rowId: row.original.id, columnId: cell.column.id });
-                      setEditingCell({ rowId: null, columnId: null });
-                      parentRef.current?.focus();
-                    }}
-                    onDoubleClick={() => {
-                      setSelectedCell({ rowId: row.original.id, columnId: cell.column.id });
-                      setEditingCell({ rowId: row.original.id, columnId: cell.column.id });
-                    }}
-                    onMouseDown={(e) => {
-                      if (e.button !== 0) return;
-                      setIsDragging(true);
-                      setSelectionRange({ start: { row: virtualRow.index, col: cIdx }, end: { row: virtualRow.index, col: cIdx } });
-                      setSelectedCell({ rowId: row.original.id, columnId: cell.column.id });
-                      setEditingCell({ rowId: null, columnId: null });
-                    }}
-                    onMouseEnter={() => {
-                      if (!isDragging) return;
-                      setSelectionRange((prev) => ({ start: prev.start, end: { row: virtualRow.index, col: cIdx } }));
-                    }}
-                  >
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </div>
-                ))}
+                {/* 行号列，灰色文本、不可交互 */}
+                <div
+                  className="sheet-cell frozen"
+                  style={{
+                    position: 'sticky',
+                    left: 0,
+                    zIndex: 4,
+                    background: '#fff',
+                    color: '#999',
+                    pointerEvents: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '0 4px',
+                    width: `${indexColWidth}px`,
+                    borderRight: '1px solid #eee',
+                    boxSizing: 'border-box'
+                  }}
+                >{virtualRow.index + 1}</div>
+                {(function() {
+                  const cellMap = new Map<string, any>();
+                  row.getVisibleCells()
+                    .filter((cell) => cell && cell.column && (cell.column as any).id)
+                    .forEach((cell) => { cellMap.set((cell.column as any).id as string, cell); });
+                  return headerIds.map((colId, cIdx) => {
+                    const cell = cellMap.get(colId);
+                    if (!cell) return null;
+                    const rowId = (row.original as any)?.id ?? row.id;
+                    return (
+                      <div
+                        key={(cell as any).id ?? `${row.id}-${cIdx}`}
+                        className={`sheet-cell${cIdx < freezeCount ? ' frozen' : ''}${cIdx === freezeCount - 1 ? ' frozen-shadow' : ''}${(selectedCell.rowId === rowId && selectedCell.columnId === colId) ? ' is-selected' : ''}${isInRange(virtualRow.index, cIdx) ? ' is-range' : ''}`}
+                        style={{
+                          position: (cIdx < freezeCount) ? 'sticky' : 'static',
+                          left: (cIdx < freezeCount) ? `${computeStickyLeft(cIdx)}px` : undefined,
+                          zIndex: (cIdx < freezeCount) ? 3 : 1,
+                          background: (headerSelectedCid === colId)
+                            ? 'rgba(31, 111, 235, 0.10)'
+                            : ((cIdx < freezeCount) ? '#fff' : getCellBg(row.original, colId)),
+                          borderRight: `1px solid ${hoverResizeCid === colId ? '#1f6feb' : '#eee'}`,
+                          borderBottom: '1px solid #eee',
+                          width: `${getColWidth(colId)}px`,
+                          boxSizing: 'border-box',
+                          outline: undefined
+                        }}
+                        onClick={() => {
+                          const isEditingThis = editingCell.rowId === rowId && editingCell.columnId === colId;
+                          if (isEditingThis) return;
+                          setSelectedCell({ rowId: rowId, columnId: colId });
+                          setEditingCell({ rowId: null, columnId: null });
+                          setHeaderSelectedCid(null);
+                          setSelectionRange({ start: null, end: null });
+                          parentRef.current?.focus();
+                        }}
+                        onDoubleClickCapture={() => {
+                          setSelectedCell({ rowId: rowId, columnId: colId });
+                          setEditingCell({ rowId: rowId, columnId: colId });
+                        }}
+                        onMouseDown={(e) => {
+                          if (e.button !== 0) return;
+                          setIsDragging(true);
+                          setSelectionRange({ start: { row: virtualRow.index, col: cIdx }, end: { row: virtualRow.index, col: cIdx } });
+                          setSelectedCell({ rowId: rowId, columnId: colId });
+                          setEditingCell({ rowId: null, columnId: null });
+                        }}
+                        onMouseEnter={() => {
+                          if (!isDragging) return;
+                          setSelectionRange((prev) => ({ start: prev.start, end: { row: virtualRow.index, col: cIdx } }));
+                        }}
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             );
           })}

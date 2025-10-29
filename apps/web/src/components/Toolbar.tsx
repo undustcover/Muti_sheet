@@ -8,8 +8,6 @@ type Props = {
   onRowHeightChange: (h: 'low' | 'medium' | 'high' | 'xhigh') => void;
   onFilterOpen: () => void;
   onColorOpen: () => void;
-  onGroupOpen?: () => void;
-  onSortOpen?: () => void;
   onShowAllHidden?: () => void;
   onAddRecord: () => void;
   onImport?: (rows: any[]) => void;
@@ -22,9 +20,13 @@ type Props = {
   onRedo?: () => void;
   onQuery?: () => void;
   onDelete?: () => void;
+  // 新增：视图级查询（精确匹配）
+  activeQuery?: string;
+  onApplyQuery?: (q: string) => void;
+  queryFocusTick?: number;
 };
 
-export const Toolbar: React.FC<Props> = ({ columns, onColumnsChange, rowHeight, onRowHeightChange, onFilterOpen, onColorOpen, onGroupOpen, onSortOpen, onShowAllHidden, onAddRecord, onImport, onExport, columnVisibility, onToggleFieldVisibility, onUndo, onRedo, onQuery, onDelete }) => {
+export const Toolbar: React.FC<Props> = ({ columns, onColumnsChange, rowHeight, onRowHeightChange, onFilterOpen, onColorOpen, onShowAllHidden, onAddRecord, onImport, onExport, columnVisibility, onToggleFieldVisibility, onUndo, onRedo, onQuery, onDelete, activeQuery, onApplyQuery, queryFocusTick }) => {
   const [fieldOpen, setFieldOpen] = useState(false)
   const [rowHeightOpen, setRowHeightOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<ColumnItem | null>(null)
@@ -34,6 +36,7 @@ export const Toolbar: React.FC<Props> = ({ columns, onColumnsChange, rowHeight, 
   const rowHeightRef = useRef<HTMLDivElement | null>(null)
   const closeTimerRef = useRef<number | null>(null)
   const fieldCloseTimerRef = useRef<number | null>(null)
+  const queryInputRef = useRef<HTMLInputElement | null>(null)
 
   const typeOptions = useMemo(() => ['text', 'single', 'multi', 'user', 'number', 'date', 'attachment', 'formula', 'creator', 'modifier', 'created_at', 'updated_at'], [])
 
@@ -72,6 +75,14 @@ export const Toolbar: React.FC<Props> = ({ columns, onColumnsChange, rowHeight, 
       fieldCloseTimerRef.current = null
     }, 150)
   }
+
+  // 查询输入聚焦（来自 Ctrl+F 或按钮触发）
+  React.useEffect(() => {
+    if (queryInputRef.current) {
+      queryInputRef.current.focus();
+      queryInputRef.current.select();
+    }
+  }, [queryFocusTick]);
 
 
 
@@ -128,12 +139,16 @@ export const Toolbar: React.FC<Props> = ({ columns, onColumnsChange, rowHeight, 
                   <span>{c.name}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing)' }}>
                     {/* 新增：隐藏/显示图标按钮 */}
-                    <span
-                      role="button"
-                      title={isVisible ? '隐藏该字段' : '显示该字段'}
-                      style={{ cursor: 'pointer' }}
-                      onClick={() => onToggleFieldVisibility && onToggleFieldVisibility(c.id)}
-                    >{isVisible ? '👁️' : '🙈'}</span>
+                    {c.id !== 'id' ? (
+                      <span
+                        role="button"
+                        title={isVisible ? '隐藏该字段' : '显示该字段'}
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => onToggleFieldVisibility && onToggleFieldVisibility(c.id)}
+                      >{isVisible ? '👁️' : '🙈'}</span>
+                    ) : (
+                      <span title="后台字段，固定隐藏" style={{ opacity: 0.5 }}>🔒</span>
+                    )}
                     <span style={{ cursor: 'pointer' }} onClick={() => { setEditTarget(c); setEditName(c.name); setEditType(c.type); }}>···</span>
                   </div>
                 </div>
@@ -163,8 +178,6 @@ export const Toolbar: React.FC<Props> = ({ columns, onColumnsChange, rowHeight, 
 
       <button onClick={onFilterOpen}>🔎 筛选</button>
       <button onClick={() => onShowAllHidden && onShowAllHidden()}>👁️ 显示隐藏字段</button>
-      <button onClick={() => onGroupOpen && onGroupOpen()}>🗂️ 分组</button>
-      <button onClick={() => onSortOpen && onSortOpen()}>🔽 排序</button>
 
       <div
         ref={rowHeightRef}

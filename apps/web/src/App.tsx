@@ -7,6 +7,9 @@ import Sidebar from './components/Sidebar';
 import Tabs from './components/Tabs';
 import ProtectDrawer from './components/ProtectDrawer';
 import Toolbar from './components/Toolbar';
+import QueryModal from './components/QueryModal';
+// 移除顶部统计弹窗，改为底部聚合栏
+import BottomStatsBar from './components/BottomStatsBar';
 import DataTable, { type DataTableHandle } from './components/DataTable';
 import FieldDrawer from './components/FieldDrawer';
 import { useToast } from './components/Toast';
@@ -30,17 +33,13 @@ const mockUsers: User[] = [
   { id: 'u-3', name: 'Carol' },
 ];
 
-function generateMockRows(count = 100): RowRecord[] {
+function generateMockRows(count = 15): RowRecord[] {
   return Array.from({ length: count }).map((_, i) => ({
     id: `rec-${i + 1}`,
-    text: String(i + 1), // 序号字段显示行号，从 1 开始，转换为字符串
-    number: Math.round(Math.random() * 1000),
-    date: dayjs().subtract(i, 'day').toISOString(),
-    select: initialOptions[(i + 1) % initialOptions.length],
-    multiSelect: [initialOptions[i % initialOptions.length]],
-    relation: i % 5 === 0 ? `rec-${i}` : null,
-    user: mockUsers[i % mockUsers.length],
-  }));
+    text: '',
+    number: 0,
+    time: '',
+  })) as any;
 }
 
 
@@ -55,8 +54,8 @@ export default function App() {
   // 由 useTableState 管理表级状态与当前激活表
 
   const [views, setViews] = useState<View[]>([
-    { id: 'view-1', name: '视图1', protect: 'public' },
-    { id: 'view-2', name: '视图2', protect: 'public' },
+    { id: 'view-1', name: '主数据表', protect: 'public' },
+    { id: 'view-2', name: 'View 2', protect: 'public' },
   ]);
   const [activeViewId, setActiveViewId] = useState<string>('view-1');
   const [protectOpen, setProtectOpen] = useState(false);
@@ -64,22 +63,31 @@ export default function App() {
   const [rowHeight, setRowHeight] = useState<'low' | 'medium' | 'high' | 'xhigh'>('medium');
   const [freezeCount, setFreezeCount] = useState<number>(1);
   const colWidth = 160;
+  const [colWidths, setColWidths] = useState<Record<string, number>>({});
   const [fieldDrawerOpen, setFieldDrawerOpen] = useState(false);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [colorOpen, setColorOpen] = useState(false);
+  // 视图级配置：排序、冻结列数、列显隐、过滤条件、列顺序、列宽、行高、底部聚合选择
+  const [viewConfigMap, setViewConfigMap] = useState<Record<string, {
+    sorting: any;
+    freezeCount: number;
+    columnVisibility: Record<string, boolean | undefined>;
+    filterGroup: ConditionGroup | null;
+    columnOrder?: string[];
+    columnWidths?: Record<string, number>;
+    rowHeight?: 'low' | 'medium' | 'high' | 'xhigh';
+    statsAggByField?: Record<string, 'none' | 'total' | 'empty' | 'filled' | 'unique' | 'empty_pct' | 'filled_pct' | 'unique_pct'>;
+  }>>({});
 
 
-  // Column meta (header names & types)
+  // Column meta (header names & types) - 仅保留 4 个字段：首字段(隐藏)/序号(数字)/文本/时间
+  // 注意：通过列顺序确保首个可见列为“序号（数字）”
   const initialColumnMeta: Record<string, { name: string; type: string; description?: string; options?: SelectOption[]; formula?: FormulaConfig; format?: NumberFormat }> = {
-    id: { name: 'ID', type: 'text', description: '' },
-    text: { name: '序号', type: 'number', description: '', format: { decimals: 0, thousand: false } },
-    number: { name: '数字', type: 'number', description: '', format: { decimals: 0, thousand: false } },
-    date: { name: '日期', type: 'date', description: '' },
-    select: { name: '选择', type: 'single', description: '', options: initialOptions },
-    multiSelect: { name: '多选', type: 'multi', description: '', options: initialOptions },
-    relation: { name: '关联', type: 'text', description: '' },
-    user: { name: '用户', type: 'user', description: '' },
+    id: { name: '首字段', type: 'text', description: '' },
+    number: { name: '序号', type: 'number', description: '', format: { decimals: 0, thousand: false } },
+    text: { name: '文本', type: 'text', description: '' },
+    time: { name: '时间', type: 'time', description: '' },
   };
   const {
     activeTableId,
@@ -94,11 +102,11 @@ export default function App() {
     setColumnOrder,
     setColumnVisibility,
     setSorting,
-  } = useTableState({ initialTableId: 'tbl-1', initialColumnMeta, generateRows: generateMockRows, initialRowCount: 200 });
+  } = useTableState({ initialTableId: 'tbl-1', initialColumnMeta, generateRows: generateMockRows, initialRowCount: 15 });
 
-  // 默认隐藏 id 字段，用户不需要看到技术性的 ID 列
+  // 永久隐藏 id（首字段）：默认隐藏且任何情况下都保持隐藏
   useEffect(() => {
-    if (!columnVisibility.hasOwnProperty('id')) {
+    if (columnVisibility['id'] !== false) {
       setColumnVisibility(prev => ({ ...prev, id: false }));
     }
   }, [columnVisibility, setColumnVisibility]);
@@ -149,13 +157,66 @@ export default function App() {
     setSorting(next.sorting as any);
     requestMeasure();
   };
-  const openQuery = () => setFilterOpen(true);
+  // 视图级查询：按当前视图的查询词对整表进行精确匹配过滤
+  const [viewQueryMap, setViewQueryMap] = useState<Record<string, string>>({});
+  const activeQuery = viewQueryMap[activeViewId] ?? '';
+  const applyQuery = (q: string) => {
+    setViewQueryMap((prev) => ({ ...prev, [activeViewId]: q }));
+    const count = q ? data.filter((r) => {
+      const vals = Object.keys(columnMeta)
+        .filter((cid) => cid !== 'id')
+        .map((cid) => (r as any)[cid]);
+      return vals.some((v) => {
+        if (v == null) return false;
+        if (typeof v === 'object') {
+          const label = (v as any).label ?? (v as any).name ?? '';
+          return String(label) === q;
+        }
+        if (typeof v === 'string' && /\d{4}-\d{2}-\d{2}/.test(v)) {
+          const d = dayjs(v);
+          const iso = d.isValid() ? d.toISOString() : v;
+          const short = d.isValid() ? d.format('YYYY-MM-DD') : v;
+          return q === iso || q === short || q === v;
+        }
+        return String(v) === q;
+      });
+    }).length : data.length;
+    show(q ? `查询匹配 ${count} 行` : '已清空查询', 'success');
+  };
+  const [queryFocusTick, setQueryFocusTick] = useState(0);
+  const [queryOpen, setQueryOpen] = useState(false);
+  const openQuery = () => { setQueryOpen(true); setQueryFocusTick((t) => t + 1); };
+  const closeQuery = () => setQueryOpen(false);
+  // 底部聚合由独立组件负责，无顶部弹窗
   const deleteSelectedRow = () => {
     const rowId = selectedCell.rowId;
     if (!rowId) { show('请先选中一行', 'warning'); return; }
     histSetData((prev) => prev.filter((r) => r.id !== rowId));
     show('已删除选中行', 'success');
     requestMeasure();
+  };
+
+  // 仅清空选中单元格内容，不删除单元格或行
+  const clearSelectedCellContent = () => {
+    const rowId = selectedCell.rowId;
+    const colId = selectedCell.columnId;
+    if (!rowId || !colId) { show('请先选中一个单元格', 'warning'); return; }
+    const t = columnMeta[colId]?.type;
+    if (!t) { show('该单元格不可编辑', 'warning'); return; }
+    if (t === 'formula') { show('公式列为只读，无法直接清空', 'info'); return; }
+    const emptyValue = (() => {
+      if (t === 'text') return '';
+      if (t === 'number') return null as any;
+      if (t === 'date' || t === 'time') return null as any;
+      if (t === 'single') return null as any;
+      if (t === 'multi') return [] as any;
+      if (t === 'user') return null as any;
+      if (t === 'attachment') return [] as any;
+      if (t === 'relation') return null as any;
+      return null as any;
+    })();
+    histSetData((prev) => prev.map((r) => (r.id === rowId ? { ...r, [colId]: emptyValue } : r)));
+    show('已清空选中单元格内容', 'success');
   };
 
   useEffect(() => {
@@ -165,14 +226,16 @@ export default function App() {
       if (e.ctrlKey && !e.shiftKey && key === 'z') { e.preventDefault(); undo(); }
       else if ((e.ctrlKey && e.shiftKey && key === 'z') || (e.ctrlKey && key === 'y')) { e.preventDefault(); redo(); }
       else if (e.ctrlKey && key === 'f') { e.preventDefault(); openQuery(); }
-      else if (!e.ctrlKey && !e.metaKey && e.key === 'Delete') { e.preventDefault(); deleteSelectedRow(); }
+      else if (!e.ctrlKey && !e.metaKey && e.key === 'Delete') { e.preventDefault(); clearSelectedCellContent(); }
     };
     window.addEventListener('keydown', handler as any);
     return () => window.removeEventListener('keydown', handler as any);
   }, [activeNav, selectedCell.rowId]);
 
   const columnItems: ColumnItem[] = useMemo(() => (
-    columnOrder.filter((id) => !!columnMeta[id]).map((id) => ({ id, name: columnMeta[id].name, type: columnMeta[id].type }))
+    columnOrder
+      .filter((id) => id !== 'id' && !!columnMeta[id])
+      .map((id) => ({ id, name: columnMeta[id].name, type: columnMeta[id].type }))
   ), [columnMeta, columnOrder]);
 
   // 为逻辑函数提供的列类型映射（统一为 utils/logic 需要的类型名）
@@ -196,9 +259,81 @@ export default function App() {
   // 颜色规则读取
   const rules = useColorRulesStore((s) => s.rules);
   // 过滤后的数据
-  const filteredData = useMemo(() => (
-    !activeGroup ? data : data.filter((r) => matchesGroup(r, activeGroup, logicColumnMeta))
-  ), [data, activeGroup, logicColumnMeta]);
+  const filteredData = useMemo(() => {
+    const base = !activeGroup ? data : data.filter((r) => matchesGroup(r, activeGroup, logicColumnMeta));
+    if (!activeQuery) return base;
+    return base.filter((r) => {
+      const vals = Object.keys(columnMeta)
+        .filter((cid) => cid !== 'id')
+        .map((cid) => (r as any)[cid]);
+      return vals.some((v) => {
+        if (v == null) return false;
+        if (typeof v === 'object') {
+          const label = (v as any).label ?? (v as any).name ?? '';
+          return String(label) === activeQuery;
+        }
+        if (typeof v === 'string' && /\d{4}-\d{2}-\d{2}/.test(v)) {
+          const d = dayjs(v);
+          const iso = d.isValid() ? d.toISOString() : v;
+          const short = d.isValid() ? d.format('YYYY-MM-DD') : v;
+          return activeQuery === iso || activeQuery === short || activeQuery === v;
+        }
+        return String(v) === activeQuery;
+      });
+    });
+  }, [data, activeGroup, logicColumnMeta, activeQuery, columnMeta]);
+
+  // 视图切换时应用视图配置；若无配置则初始化当前状态为该视图配置
+  useEffect(() => {
+    const cfg = viewConfigMap[activeViewId];
+    if (cfg) {
+      setFreezeCount(cfg.freezeCount ?? freezeCount);
+      setSorting(cfg.sorting ?? sorting);
+      setColumnVisibility((prev) => ({ ...prev, ...cfg.columnVisibility, id: false }));
+      setActiveGroup(cfg.filterGroup ?? null);
+      if (cfg.columnOrder && cfg.columnOrder.length) setColumnOrder(cfg.columnOrder);
+      setColWidths(cfg.columnWidths ?? {});
+      if (cfg.rowHeight) setRowHeight(cfg.rowHeight);
+    } else {
+      const firstVisibleId = columnOrder.find((id) => id !== 'id' && columnVisibility[id] !== false && !!columnMeta[id]);
+      setViewConfigMap((prev) => ({
+        ...prev,
+        [activeViewId]: {
+          sorting,
+          freezeCount,
+          columnVisibility: { ...columnVisibility, id: false },
+          filterGroup: activeGroup,
+          columnOrder,
+          columnWidths: colWidths,
+          rowHeight,
+          statsAggByField: columnOrder.reduce((acc, colId) => {
+            if (colId !== 'id' && columnVisibility[colId] !== false && columnMeta[colId]) {
+              acc[colId] = 'none';
+            }
+            return acc;
+          }, {} as Record<string, 'none' | 'total' | 'empty' | 'filled' | 'unique' | 'empty_pct' | 'filled_pct' | 'unique_pct'>),
+        },
+      }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeViewId]);
+
+  // 状态变化时持久化到当前视图配置
+  useEffect(() => {
+    setViewConfigMap((prev) => ({
+      ...prev,
+      [activeViewId]: {
+        sorting: sorting,
+        freezeCount: freezeCount,
+        columnVisibility: { ...columnVisibility, id: false },
+        filterGroup: activeGroup,
+        columnOrder,
+        columnWidths: colWidths,
+        rowHeight,
+        statsAggByField: prev[activeViewId]?.statsAggByField ?? {},
+      },
+    }));
+  }, [sorting, freezeCount, columnVisibility, activeGroup, columnOrder, colWidths, rowHeight, activeViewId]);
   // 单元格背景色（综合规则与列基础色）
   const getCellBg = (row: RowRecord, columnId: string): string | undefined => {
     const { cellBg, rowBg } = applyColorBackground(rules, row, columnId, columnColors, logicColumnMeta);
@@ -296,6 +431,7 @@ export default function App() {
   };
   // 新增：切换字段显示/隐藏
   const onToggleFieldVisibility = (id: string) => {
+    if (id === 'id') { show('首字段已隔离为后台字段，固定隐藏', 'info'); return; }
     histSetColumnVisibility((v: any) => {
       const isVisible = v[id] !== false;
       if (isVisible) {
@@ -357,12 +493,19 @@ export default function App() {
     show('整列填色已应用', 'success');
   };
 
-  const showAllHidden = () => { setColumnVisibility({}); };
+  const showAllHidden = () => {
+    setColumnVisibility((prev: any) => {
+      const next: Record<string, boolean> = {};
+      Object.keys(columnMeta).forEach((cid) => { next[cid] = true; });
+      next['id'] = false; // 保持首字段隐藏
+      return next;
+    });
+  };
 
   // Tabs actions
   const addView = () => {
     const n = views.length + 1;
-    setViews((prev) => [...prev, { id: `view-${n}`, name: `视图${n}`, protect: 'public' }]);
+    setViews((prev) => [...prev, { id: `view-${n}`, name: `View ${n}`, protect: 'public' }]);
   };
   const renameView = (id: string, name: string) => setViews((v) => v.map((x) => x.id === id ? { ...x, name } : x));
   const duplicateView = (id: string) => {
@@ -414,8 +557,6 @@ export default function App() {
               onRowHeightChange={setRowHeight}
               onFilterOpen={() => setFilterOpen(true)}
               onColorOpen={() => setColorOpen(true)}
-              onGroupOpen={() => show('分组占位', 'info')}
-              onSortOpen={() => show('排序占位', 'info')}
               onShowAllHidden={showAllHidden}
               onAddRecord={onAddRecord}
               onImport={onImport}
@@ -425,7 +566,7 @@ export default function App() {
               onUndo={undo}
               onRedo={redo}
               onQuery={openQuery}
-              onDelete={deleteSelectedRow}
+              onDelete={clearSelectedCellContent}
             />
           </div>
         )}
@@ -450,6 +591,8 @@ export default function App() {
                 freezeCount={freezeCount}
                 onFreezeTo={(n) => setFreezeCount(n)}
                 colWidth={colWidth}
+                colWidths={colWidths}
+                setColWidths={setColWidths}
                 defaultSelectOptions={initialOptions}
                 getCellBg={getCellBg}
                 selectedCell={selectedCell}
@@ -462,8 +605,35 @@ export default function App() {
                 onInsertLeft={onInsertLeft}
                 onInsertRight={onInsertRight}
                 onDuplicateField={onDuplicateField}
-                onFillColorColumn={onFillColorColumn}
-                onCreateField={() => { const newId = `field-${Date.now()}`; setEditingFieldId(newId); setFieldDrawerOpen(true); }}
+              onFillColorColumn={onFillColorColumn}
+              onCreateField={() => { const newId = `field-${Date.now()}`; setEditingFieldId(newId); setFieldDrawerOpen(true); }}
+            />
+              {/* 底部聚合栏：按视图保存每字段的聚合类型 */}
+              <BottomStatsBar
+                columns={columnItems}
+                rows={filteredData}
+                columnVisibility={columnVisibility as any}
+                statsAggByField={viewConfigMap[activeViewId]?.statsAggByField ?? {}}
+                columnOrder={columnOrder}
+                colWidths={colWidths}
+                defaultColWidth={colWidth}
+                freezeCount={freezeCount}
+                onChangeAgg={(fieldId, agg) => {
+                  setViewConfigMap((prev) => ({
+                    ...prev,
+                    [activeViewId]: {
+                      ...(prev[activeViewId] ?? {}),
+                      sorting: sorting,
+                      freezeCount: freezeCount,
+                      columnVisibility: { ...columnVisibility, id: false },
+                      filterGroup: activeGroup,
+                      columnOrder,
+                      columnWidths: colWidths,
+                      rowHeight,
+                      statsAggByField: { ...(prev[activeViewId]?.statsAggByField ?? {}), [fieldId]: agg },
+                    },
+                  }));
+                }}
               />
               {Object.values(columnVisibility).some((v) => v === false) && (
                 <div style={{ padding: '6px 0', fontSize: 12, color: '#666' }}>
@@ -659,6 +829,8 @@ export default function App() {
           onApplyColumnColor={onFillColorColumn}
         />
       )}
+      {/* 查询弹窗 */}
+      <QueryModal open={queryOpen} onClose={closeQuery} value={activeQuery} onApply={applyQuery} focusTick={queryFocusTick} />
     </div>
   );
 }

@@ -92,7 +92,7 @@ export function useTableState(params: UseTableStateParams) {
       return {
         ...prev,
         [activeTableId]: {
-          data: generateRows(100),
+          data: generateRows(initialRowCount),
           columnMeta: initialColumnMeta,
           columnOrder: Object.keys(initialColumnMeta),
           columnVisibility: {},
