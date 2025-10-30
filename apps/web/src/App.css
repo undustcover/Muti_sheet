@@ -54,9 +54,9 @@
   left: 0;
   width: 100%;
   display: grid;
-  gap: 1px; /* grid lines between cells */
+  gap: 0; /* keep header/body grid tracks identical to avoid misalignment */
   padding: 6px 0;
-  border-bottom: 1px solid #f3f3f3;
+  border-bottom: none; /* remove horizontal row divider */
 }
 
 .sheet-cell {

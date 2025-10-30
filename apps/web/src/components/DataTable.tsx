@@ -741,7 +741,7 @@ const [indexColWidth, setIndexColWidth] = useState<number>(26);
                 key={row.id}
                 data-index={virtualRow.index}
                 className="sheet-grid-row"
-                style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${virtualRow.start}px)`, display: 'grid', gridTemplateColumns: templateColumns, minWidth: `${totalWidth}px`, borderBottom: '1px solid #eee' }}
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${virtualRow.start}px)`, display: 'grid', gridTemplateColumns: templateColumns, minWidth: `${totalWidth}px`, borderBottom: 'none' }}
               >
                 {/* 行号列，灰色文本、不可交互 */}
                 <div
