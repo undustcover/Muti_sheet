@@ -143,12 +143,17 @@ export default function App() {
     return Object.fromEntries(Object.entries(columnMeta).map(([id, m]) => [id, { type: mapType(m.type) }]));
   }, [columnMeta]);
 
+  // 颜色规则（用于视图保存）
+  const rules = useColorRulesStore((s) => s.rules);
+  const setColorRules = useColorRulesStore((s) => s.setRules);
+
   // 视图：过滤/查询/配置
   const {
     activeGroup,
     setActiveGroup,
     filteredByGroup,
     applyGroup,
+    clearGroup,
     viewConfigMap,
     updateStatsAgg,
     activeQuery,
@@ -169,12 +174,16 @@ export default function App() {
     columnOrder,
     columnWidths: colWidths,
     rowHeight,
+    columnColors,
+    colorRules: rules,
     setSorting,
     setFreezeCount,
     setColumnVisibility,
     setColumnOrder,
     setColumnWidths: setColWidths,
     setRowHeight,
+    setColumnColors,
+    setColorRules,
     show,
   });
 
@@ -208,8 +217,14 @@ export default function App() {
   const hiddenToastShownRef = useRef(false);
   const onlyFrozenToastShownRef = useRef(false);
 
-  const rules = useColorRulesStore((s) => s.rules);
   const { getCellBg } = useColorRules({ rules, columnMeta: logicColumnMeta, columnColors });
+
+  const countGroupConds = (grp: any): number => {
+    if (!grp || !Array.isArray(grp.conditions)) return 0;
+    return grp.conditions.reduce((acc: number, it: any) => (
+      acc + (it && 'conditions' in it ? countGroupConds(it) : 1)
+    ), 0);
+  };
 
   useEffect(() => {
     if (hasHidden && !hiddenToastShownRef.current) {
@@ -366,6 +381,7 @@ export default function App() {
       >
         {activeNav === 'table' && (
           <>
+            
             <DataTable
               ref={tableRef}
               rows={filteredData}
@@ -530,6 +546,8 @@ export default function App() {
           open={filterOpen}
           columns={columnItems}
           onClose={closeFilter}
+          initialGroup={activeGroup}
+          onClear={() => { clearGroup(); closeFilter(); show('已清除筛选', 'info'); }}
           onApply={(group) => {
             const nextCount = applyGroup(group);
             closeFilter();

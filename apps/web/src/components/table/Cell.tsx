@@ -13,30 +13,36 @@ type Props = {
 };
 
 const Cell: React.FC<Props> = ({ row, columnId, editorType, value, options = [], setData }) => {
-  const { selectedCell, editingCell } = useGridState();
+  const { selectedCell, editingCell, setSelectedCell, setEditingCell } = useGridState();
 
-  const isSelected = selectedCell.rowId === row.original.id && selectedCell.columnId === columnId;
-  const isEditing = editingCell.rowId === row.original.id && editingCell.columnId === columnId;
+  const rowId: string = ((row as any)?.original?.id ?? (row as any)?.id) as string;
+  const isSelected = selectedCell.rowId === rowId && selectedCell.columnId === columnId;
+  const isEditing = editingCell.rowId === rowId && editingCell.columnId === columnId;
+
+  const handleDbl = () => {
+    setSelectedCell({ rowId, columnId });
+    setEditingCell({ rowId, columnId });
+  };
 
   const renderDisplay = (val: any) => {
     if (editorType === 'select') {
-      return <span>{val?.label ?? ''}</span>;
+      return <span onDoubleClick={handleDbl}>{val?.label ?? ''}</span>;
     }
     if (editorType === 'multiSelect') {
-      return <span>{Array.isArray(val) ? val.map((x: SelectOption) => x.label).join(', ') : ''}</span>;
+      return <span onDoubleClick={handleDbl}>{Array.isArray(val) ? val.map((x: SelectOption) => x.label).join(', ') : ''}</span>;
     }
     if (editorType === 'date') {
       try {
         const d = new Date(val);
-        return <span>{isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)}</span>;
+        return <span onDoubleClick={handleDbl}>{isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)}</span>;
       } catch {
-        return <span />;
+        return <span onDoubleClick={handleDbl} />;
       }
     }
     if (editorType === 'user') {
-      return <span>{val?.name ?? ''}</span>;
+      return <span onDoubleClick={handleDbl}>{val?.name ?? ''}</span>;
     }
-    return <span>{val ?? ''}</span>;
+    return <span onDoubleClick={handleDbl}>{val ?? ''}</span>;
   };
 
   if (!isSelected || !isEditing) {

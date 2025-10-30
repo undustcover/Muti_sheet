@@ -76,6 +76,7 @@ export default function Row({
               width: `${getColWidth(colId)}px`,
               boxSizing: 'border-box',
               outline: undefined,
+              userSelect: 'none',
             }}
             onClick={() => {
               const isEditingThis = editingCell.rowId === rowId && editingCell.columnId === colId;
@@ -90,8 +91,24 @@ export default function Row({
               setSelectedCell({ rowId, columnId: colId });
               setEditingCell({ rowId, columnId: colId });
             }}
+            onDoubleClick={() => {
+              setSelectedCell({ rowId, columnId: colId });
+              setEditingCell({ rowId, columnId: colId });
+            }}
             onMouseDown={(e) => {
               if (e.button !== 0) return;
+              // 若是双击序列中的第二次按下（detail === 2），优先进入编辑并阻止后续拖选逻辑
+              const detail = (e as unknown as { detail?: number }).detail ?? 1;
+              if (detail >= 2) {
+                e.preventDefault();
+                e.stopPropagation();
+                setSelectedCell({ rowId, columnId: colId });
+                setEditingCell({ rowId, columnId: colId });
+                setIsDragging(false);
+                setSelectionRange({ start: null, end: null });
+                return;
+              }
+              // 单击则进入选择（不编辑），并启动拖选
               setIsDragging(true);
               setSelectionRange({ start: { row: rowIndex, col: cIdx }, end: { row: rowIndex, col: cIdx } });
               setSelectedCell({ rowId, columnId: colId });

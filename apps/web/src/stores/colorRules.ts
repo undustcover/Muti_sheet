@@ -24,6 +24,7 @@ export type ColorRulesState = {
   addRule: (rule: Omit<ColorRule, 'id' | 'enabled'> & { enabled?: boolean }) => string;
   removeRule: (id: string) => void;
   clearRules: () => void;
+  setRules: (rules: ColorRule[]) => void;
   moveUp: (id: string) => void;
   moveDown: (id: string) => void;
   toggleRule: (id: string, enabled?: boolean) => void;
@@ -43,6 +44,7 @@ export const useColorRulesStore = create<ColorRulesState>((set) => ({
   },
   removeRule: (id) => set((s) => ({ rules: s.rules.filter((r) => r.id !== id) })),
   clearRules: () => set({ rules: [] }),
+  setRules: (rules) => set({ rules }),
   moveUp: (id) => set((s) => {
     const idx = s.rules.findIndex((r) => r.id === id);
     if (idx <= 0) return s;

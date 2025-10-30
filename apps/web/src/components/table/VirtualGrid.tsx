@@ -16,6 +16,7 @@ type Props = {
   getColWidth: (cid: string) => number;
   getCellBg: (row: any, columnId: string) => string | undefined;
   hoverResizeCid: string | null;
+  onRowContextMenu?: (index: number, x: number, y: number) => void;
 };
 
 const VirtualGrid: React.FC<Props> = ({
@@ -31,6 +32,7 @@ const VirtualGrid: React.FC<Props> = ({
   getColWidth,
   getCellBg,
   hoverResizeCid,
+  onRowContextMenu,
 }) => {
   return (
     <div style={{ height: totalSize, position: 'relative', minWidth: `${totalWidth}px` }}>
@@ -41,7 +43,16 @@ const VirtualGrid: React.FC<Props> = ({
             key={row.id}
             data-index={virtualRow.index}
             className="sheet-grid-row"
-            style={makeRowContainerStyle(templateColumns, totalWidth, virtualRow.start)}
+            style={{
+              ...makeRowContainerStyle(templateColumns, totalWidth, virtualRow.start),
+              height: virtualRow.size,
+            }}
+            onContextMenu={(e) => {
+              if (!onRowContextMenu) return;
+              e.preventDefault();
+              e.stopPropagation();
+              onRowContextMenu(virtualRow.index, e.clientX, e.clientY);
+            }}
           >
             <Row
               row={row}

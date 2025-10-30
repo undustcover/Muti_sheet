@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import dayjs from 'dayjs';
 import type { RowRecord } from '../types';
-import type { ConditionGroup } from '../stores/colorRules';
+import type { ConditionGroup, ColorRule } from '../stores/colorRules';
 import { useFilterGroup } from './useFilterGroup';
 import { useViewConfig, type StatsAgg } from './useViewConfig';
 import { useViewQuery } from './useViewQuery';
@@ -22,6 +22,9 @@ export function useViews(params: {
   columnOrder: string[];
   columnWidths: Record<string, number>;
   rowHeight: 'low' | 'medium' | 'high' | 'xhigh';
+  // color states
+  columnColors: Record<string, string>;
+  colorRules: ColorRule[];
 
   // setters for applying view config
   setSorting: (s: any) => void;
@@ -30,6 +33,8 @@ export function useViews(params: {
   setColumnOrder: (o: string[]) => void;
   setColumnWidths: (w: Record<string, number>) => void;
   setRowHeight: (h: 'low' | 'medium' | 'high' | 'xhigh') => void;
+  setColumnColors: (u: (prev: Record<string, string>) => Record<string, string>) => void;
+  setColorRules: (rules: ColorRule[]) => void;
 
   // UI feedback
   show: (msg: string, type?: 'info' | 'success' | 'error') => void;
@@ -45,12 +50,16 @@ export function useViews(params: {
     columnOrder,
     columnWidths,
     rowHeight,
+    columnColors,
+    colorRules,
     setSorting,
     setFreezeCount,
     setColumnVisibility,
     setColumnOrder,
     setColumnWidths,
     setRowHeight,
+    setColumnColors,
+    setColorRules,
     show,
   } = params;
 
@@ -71,6 +80,8 @@ export function useViews(params: {
     columnWidths,
     rowHeight,
     columnMeta,
+    columnColors,
+    colorRules,
     setSorting,
     setFreezeCount,
     setColumnVisibility,
@@ -78,6 +89,8 @@ export function useViews(params: {
     setColumnOrder,
     setColumnWidths,
     setRowHeight,
+    setColumnColors,
+    setColorRules,
   });
 
   // 视图查询

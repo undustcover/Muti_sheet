@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ConditionGroup } from '../stores/colorRules';
+import type { ConditionGroup, ColorRule } from '../stores/colorRules';
 
 export type StatsAgg = 'none' | 'total' | 'empty' | 'filled' | 'unique' | 'empty_pct' | 'filled_pct' | 'unique_pct';
 
@@ -15,6 +15,9 @@ export function useViewConfig(params: {
   columnWidths: Record<string, number>;
   rowHeight: 'low' | 'medium' | 'high' | 'xhigh';
   columnMeta: Record<string, { type: string; name?: string }>;
+  // color related
+  columnColors: Record<string, string>;
+  colorRules: ColorRule[];
   // setters to apply when switching views
   setSorting: (s: any) => void;
   setFreezeCount: (n: number) => void;
@@ -23,6 +26,8 @@ export function useViewConfig(params: {
   setColumnOrder: (o: string[]) => void;
   setColumnWidths: (w: Record<string, number>) => void;
   setRowHeight: (h: 'low' | 'medium' | 'high' | 'xhigh') => void;
+  setColumnColors: (u: (prev: Record<string, string>) => Record<string, string>) => void;
+  setColorRules: (rules: ColorRule[]) => void;
 }) {
   const {
     activeViewId,
@@ -34,6 +39,8 @@ export function useViewConfig(params: {
     columnWidths,
     rowHeight,
     columnMeta,
+    columnColors,
+    colorRules,
     setSorting,
     setFreezeCount,
     setColumnVisibility,
@@ -41,6 +48,8 @@ export function useViewConfig(params: {
     setColumnOrder,
     setColumnWidths,
     setRowHeight,
+    setColumnColors,
+    setColorRules,
   } = params;
 
   const [viewConfigMap, setViewConfigMap] = useState<Record<string, {
@@ -52,6 +61,8 @@ export function useViewConfig(params: {
     columnWidths?: Record<string, number>;
     rowHeight?: 'low' | 'medium' | 'high' | 'xhigh';
     statsAggByField?: Record<string, StatsAgg>;
+    columnColors?: Record<string, string>;
+    colorRules?: ColorRule[];
   }>>({});
 
   // when active view changes, apply its config or initialize from current states
@@ -65,6 +76,8 @@ export function useViewConfig(params: {
       if (cfg.columnOrder && cfg.columnOrder.length) setColumnOrder(cfg.columnOrder);
       setColumnWidths(cfg.columnWidths ?? {});
       if (cfg.rowHeight) setRowHeight(cfg.rowHeight);
+      if (cfg.columnColors) setColumnColors(() => ({ ...cfg.columnColors }));
+      if (cfg.colorRules) setColorRules(cfg.colorRules);
     } else {
       setViewConfigMap((prev) => ({
         ...prev,
@@ -82,6 +95,8 @@ export function useViewConfig(params: {
             }
             return acc;
           }, {} as Record<string, StatsAgg>),
+          columnColors: { ...columnColors },
+          colorRules: [...colorRules],
         },
       }));
     }
@@ -101,9 +116,11 @@ export function useViewConfig(params: {
         columnWidths,
         rowHeight,
         statsAggByField: prev[activeViewId]?.statsAggByField ?? {},
+        columnColors: { ...columnColors },
+        colorRules: [...colorRules],
       },
     }));
-  }, [sorting, freezeCount, columnVisibility, filterGroup, columnOrder, columnWidths, rowHeight, activeViewId]);
+  }, [sorting, freezeCount, columnVisibility, filterGroup, columnOrder, columnWidths, rowHeight, columnColors, colorRules, activeViewId]);
 
   const updateStatsAgg = (fieldId: string, agg: StatsAgg) => {
     setViewConfigMap((prev) => ({

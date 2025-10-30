@@ -6,8 +6,10 @@ import { getCoreRowModel, getSortedRowModel, useReactTable } from '@tanstack/rea
 
 
 import type { RowRecord, SelectOption } from '../types';
+import type { Condition, ConditionGroup } from '../stores/colorRules';
 import { getColWidth as getColWidthUtil, buildTemplateColumns, calcTotalWidth, computeStickyLeft as computeStickyLeftUtil } from './table/utils';
 import { GridStateProvider, GridSurface, Cell } from './table';
+import RowContextMenu from './table/RowContextMenu';
 import { useClipboard } from './table/hooks/useClipboard';
 import { useSelection } from './table/hooks/useSelection';
 import { useColumnResize } from './table/hooks/useColumnResize';
@@ -200,7 +202,85 @@ const [indexColWidth] = useState<number>(26);
   const { onFillKey } = useSelectionEditing({ selectedCell, columnMeta, setData, table, selectionRange, columnOrder, columnVisibility });
   // Inline GridSurface removed; using external component from './table/GridSurface'
 
+  // 行右键菜单状态
+  const [rowMenu, setRowMenu] = useState<{ open: boolean; x: number; y: number; anchorRowId: string | null }>(
+    { open: false, x: 0, y: 0, anchorRowId: null }
+  );
 
+  // 生成空行记录
+  const makeEmptyRow = (): RowRecord => ({
+    id: (typeof crypto !== 'undefined' && 'randomUUID' in crypto) ? (crypto as any).randomUUID() : `row_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
+    text: '',
+    number: 0,
+    date: '',
+    select: null,
+    multiSelect: [],
+    relation: null,
+    user: null,
+  });
+
+  // 根据展示行索引定位原始数据中的插入位置
+  const resolveInsertIndex = (displayIndex: number): number => {
+    const rowModelRows: any[] = table.getRowModel().rows || [];
+    const target = rowModelRows[displayIndex];
+    const targetId: string | undefined = target?.original?.id ?? target?.id ?? undefined;
+    if (!targetId) return rows.length; // fallback: 插到末尾
+    const idx = rows.findIndex((r) => r.id === targetId);
+    return idx >= 0 ? idx : rows.length;
+  };
+
+  const insertRowsAt = (baseIndex: number, count: number, offset: number) => {
+    const n = Math.max(1, Math.min(999, count | 0));
+    const toInsert: RowRecord[] = Array.from({ length: n }, () => makeEmptyRow());
+    const insertIndex = Math.max(0, Math.min(rows.length, baseIndex + offset));
+    setData((prev) => {
+      const next = prev.slice();
+      next.splice(insertIndex, 0, ...toInsert);
+      return next;
+    });
+  };
+
+  const handleRowContextMenu = (index: number, x: number, y: number) => {
+    const rowModelRows: any[] = table.getRowModel().rows || [];
+    const target = rowModelRows[index];
+    const anchorRowId: string | null = (target?.original?.id ?? target?.id ?? null) as any;
+    setRowMenu({ open: true, x, y, anchorRowId });
+  };
+
+  const onInsertAbove = (count: number) => {
+    if (!rowMenu.anchorRowId) return setRowMenu({ open: false, x: 0, y: 0, anchorRowId: null });
+    const displayIndex = (table.getRowModel().rows || []).findIndex((r: any) => (r.original?.id ?? r.id) === rowMenu.anchorRowId);
+    const baseIndex = resolveInsertIndex(Math.max(0, displayIndex));
+    insertRowsAt(baseIndex, count, 0);
+  };
+
+  const onInsertBelow = (count: number) => {
+    if (!rowMenu.anchorRowId) return setRowMenu({ open: false, x: 0, y: 0, anchorRowId: null });
+    const displayIndex = (table.getRowModel().rows || []).findIndex((r: any) => (r.original?.id ?? r.id) === rowMenu.anchorRowId);
+    const baseIndex = resolveInsertIndex(Math.max(0, displayIndex));
+    insertRowsAt(baseIndex, count, 1);
+  };
+
+  const onDeleteRow = () => {
+    if (!rowMenu.anchorRowId) return setRowMenu({ open: false, x: 0, y: 0, anchorRowId: null });
+    const displayIndex = (table.getRowModel().rows || []).findIndex((r: any) => (r.original?.id ?? r.id) === rowMenu.anchorRowId);
+    const baseIndex = resolveInsertIndex(Math.max(0, displayIndex));
+    setData((prev) => {
+      const next = prev.slice();
+      if (baseIndex >= 0 && baseIndex < next.length) next.splice(baseIndex, 1);
+      return next;
+    });
+    setRowMenu({ open: false, x: 0, y: 0, anchorRowId: null });
+  };
+
+  const onAddComment = () => {
+    // 占位：评论系统未接入。可在此打开评论输入弹窗并持久化到数据源。
+    try { console.info('添加评论：行', rowMenu.anchorRowId); } catch {}
+    setRowMenu({ open: false, x: 0, y: 0, anchorRowId: null });
+  };
+
+
+  
   return (
     <div data-app-ready="1">
       <GridStateProvider value={{ selectedCell, editingCell, setSelectedCell, setEditingCell, selectionRange, setSelectionRange, isDragging, setIsDragging, isInRange, headerSelectedCid, setHeaderSelectedCid, focusGrid: () => parentRef.current?.focus() }}>
@@ -230,16 +310,17 @@ const [indexColWidth] = useState<number>(26);
           onInsertLeft={onInsertLeft}
           onInsertRight={onInsertRight}
           onDuplicateField={onDuplicateField}
-          onFillColorColumn={onFillColorColumn}
-          hoverResizeCid={hoverResizeCid}
-          setHoverResizeCid={setHoverResizeCid}
-          startResize={startResize}
-          onCreateField={onCreateField}
-          rowVirtualizer={rowVirtualizer}
-          getCellBg={getCellBg}
-          onPaste={handlePaste}
-        />
-      </GridStateProvider>
+        onFillColorColumn={onFillColorColumn}
+        hoverResizeCid={hoverResizeCid}
+        setHoverResizeCid={setHoverResizeCid}
+        startResize={startResize}
+        onCreateField={onCreateField}
+        rowVirtualizer={rowVirtualizer}
+        getCellBg={getCellBg}
+        onPaste={handlePaste}
+        onRowContextMenu={handleRowContextMenu}
+      />
+    </GridStateProvider>
       {copyToast.show && (
         <div style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 9999, background: '#111', color: '#fff', padding: '8px 12px', borderRadius: 8, boxShadow: '0 8px 20px rgba(0,0,0,0.25)', fontSize: 13 }}>
           已复制 {copyToast.count} 个单元格
@@ -257,6 +338,17 @@ const [indexColWidth] = useState<number>(26);
           </div>
         </div>
       )}
+      {/* 行右键菜单 */}
+      <RowContextMenu
+        open={rowMenu.open}
+        x={rowMenu.x}
+        y={rowMenu.y}
+        onClose={() => setRowMenu({ open: false, x: 0, y: 0, anchorRowId: null })}
+        onInsertAbove={onInsertAbove}
+        onInsertBelow={onInsertBelow}
+        onAddComment={onAddComment}
+        onDeleteRow={onDeleteRow}
+      />
     </div>
   );
 });

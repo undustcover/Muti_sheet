@@ -42,6 +42,7 @@ type Props<TData = RowRecord> = {
   rowVirtualizer: Virtualizer;
   getCellBg: (row: any, columnId: string) => string | undefined;
   onPaste: (e: React.ClipboardEvent<HTMLDivElement>) => void;
+  onRowContextMenu?: (index: number, x: number, y: number) => void;
 };
 
 export default function GridSurface<TData = RowRecord>({
@@ -78,6 +79,7 @@ export default function GridSurface<TData = RowRecord>({
   rowVirtualizer,
   getCellBg,
   onPaste,
+  onRowContextMenu,
 }: Props<TData>) {
   const { setHeaderSelectedCid, setSelectionRange, setIsDragging } = useGridState();
   const { onKeyDown } = useKeyboardGrid<TData>({ table, columns, onCopyKey, onFillKey });
@@ -153,6 +155,7 @@ export default function GridSurface<TData = RowRecord>({
         getColWidth={getColWidth}
         getCellBg={getCellBg}
         hoverResizeCid={hoverResizeCid}
+        onRowContextMenu={onRowContextMenu}
       />
     </div>
   );
