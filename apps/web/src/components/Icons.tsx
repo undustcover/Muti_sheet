@@ -114,3 +114,63 @@ export const IconComment: React.FC<IconProps> = ({ size = 16, color, style, ...r
     <path {...base} d="M4 5h16v12H7l-3 3z" />
   </svg>
 );
+
+export const IconTrash: React.FC<IconProps> = ({ size = 16, color, style, ...rest }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" style={{ display: 'inline-block', color, ...style }} {...rest}>
+    <path {...base} d="M3 6h18" />
+    <path {...base} d="M8 6v-2h8v2" />
+    <rect {...base} x="5" y="6" width="14" height="14" rx="2" />
+    <path {...base} d="M10 11v6M14 11v6" />
+  </svg>
+);
+
+export const IconUpload: React.FC<IconProps> = ({ size = 16, color, style, ...rest }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" style={{ display: 'inline-block', color, ...style }} {...rest}>
+    <path {...base} d="M12 16V5" />
+    <path {...base} d="M7 10l5-5 5 5" />
+    <rect {...base} x="4" y="16" width="16" height="4" rx="1" />
+  </svg>
+);
+
+export const IconDownload: React.FC<IconProps> = ({ size = 16, color, style, ...rest }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" style={{ display: 'inline-block', color, ...style }} {...rest}>
+    <path {...base} d="M12 5v11" />
+    <path {...base} d="M7 14l5 5 5-5" />
+    <rect {...base} x="4" y="5" width="16" height="4" rx="1" />
+  </svg>
+);
+
+// 新增：配置、筛选、行高、调色板
+export const IconSettings: React.FC<IconProps> = ({ size = 16, color, style, ...rest }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" style={{ display: 'inline-block', color, ...style }} {...rest}>
+    <path {...base} d="M4 7h16" />
+    <path {...base} d="M4 12h16" />
+    <path {...base} d="M4 17h16" />
+    <circle cx="8" cy="7" r="1.8" fill="currentColor" />
+    <circle cx="12" cy="12" r="1.8" fill="currentColor" />
+    <circle cx="16" cy="17" r="1.8" fill="currentColor" />
+  </svg>
+);
+
+export const IconFilter: React.FC<IconProps> = ({ size = 16, color, style, ...rest }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" style={{ display: 'inline-block', color, ...style }} {...rest}>
+    <path {...base} d="M3 6h18l-7 8v6h-4v-6z" />
+  </svg>
+);
+
+export const IconHeight: React.FC<IconProps> = ({ size = 16, color, style, ...rest }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" style={{ display: 'inline-block', color, ...style }} {...rest}>
+    <path {...base} d="M12 5v14" />
+    <path {...base} d="M8 9l4-4 4 4" />
+    <path {...base} d="M8 15l4 4 4-4" />
+  </svg>
+);
+
+export const IconPalette: React.FC<IconProps> = ({ size = 16, color, style, ...rest }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" style={{ display: 'inline-block', color, ...style }} {...rest}>
+    <rect {...base} x="4" y="6" width="16" height="10" rx="2" />
+    <circle cx="9" cy="11" r="1.6" fill="currentColor" />
+    <circle cx="12" cy="11" r="1.6" fill="currentColor" />
+    <circle cx="15" cy="11" r="1.6" fill="currentColor" />
+  </svg>
+);

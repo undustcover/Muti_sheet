@@ -7,6 +7,8 @@ export type ConditionBuilderProps = {
   columns: ColumnItem[];
   onClose: () => void;
   onApply: (group: ConditionGroup) => void;
+  initialGroup?: ConditionGroup | null;
+  onClear?: () => void;
 };
 
 const overlayStyle: React.CSSProperties = {
@@ -110,11 +112,15 @@ function GroupEditor({
   );
 }
 
-export function ConditionBuilder({ open, columns, onClose, onApply }: ConditionBuilderProps) {
+export function ConditionBuilder({ open, columns, onClose, onApply, initialGroup, onClear }: ConditionBuilderProps) {
   const defaultFieldId = useMemo(() => (columns[1]?.id ?? columns[0]?.id ?? 'text'), [columns]);
-  const [group, setGroup] = useState<ConditionGroup>({ operator: 'AND', conditions: [
+  const [group, setGroup] = useState<ConditionGroup>(initialGroup ?? { operator: 'AND', conditions: [
     { fieldId: defaultFieldId, operator: 'contains', value: '' },
   ]});
+  React.useEffect(() => {
+    if (!open) return;
+    if (initialGroup) setGroup(initialGroup);
+  }, [open, initialGroup]);
 
   if (!open) return null;
 
@@ -126,6 +132,30 @@ export function ConditionBuilder({ open, columns, onClose, onApply }: ConditionB
           <button onClick={onClose}>关闭</button>
         </div>
         <div style={{ marginTop: 12, fontSize: 13, color: '#666' }}>支持 AND/OR 以及嵌套子组。应用后按条件组过滤数据。</div>
+        {group.conditions.length > 0 && (
+          <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: '#374151' }}>当前筛选项（{group.conditions.length}）</span>
+            {group.conditions.map((item, idx) => (
+              <span key={`chip-${idx}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 8px', borderRadius: 999, background: '#e0e7ff', color: '#111827', fontSize: 12 }}>
+                {'conditions' in (item as any) ? `子组 (${(item as ConditionGroup).operator})` : (() => {
+                  const cond = item as Condition;
+                  const fname = columns.find((c) => c.id === cond.fieldId)?.name ?? cond.fieldId;
+                  const opMap: Record<string, string> = { eq: '等于', contains: '包含', gt: '大于', lt: '小于', isEmpty: '为空', notEmpty: '非空' };
+                  const val = cond.value ?? '';
+                  return `${fname} ${opMap[cond.operator] ?? cond.operator}${val ? ` ${val}` : ''}`;
+                })()}
+                <button onClick={() => {
+                  const nextList = group.conditions.filter((_, i) => i !== idx);
+                  setGroup({ ...group, conditions: nextList });
+                }} title="删除" style={{ border: 'none', background: 'transparent', color: '#6b7280', cursor: 'pointer' }}>×</button>
+              </span>
+            ))}
+            <span style={{ marginLeft: 'auto' }}>
+              <button onClick={() => onClear?.()} style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: '#ef4444', color: '#fff', cursor: 'pointer' }}>清除全部</button>
+            </span>
+          </div>
+        )}
+
         <div style={{ marginTop: 16 }}>
           <GroupEditor group={group} columns={columns} onChange={setGroup} />
         </div>

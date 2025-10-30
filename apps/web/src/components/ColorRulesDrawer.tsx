@@ -17,7 +17,7 @@ const overlayStyle: CSSProperties = {
   position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', display: 'flex', alignItems: 'flex-end', zIndex: 50,
 };
 const drawerStyle: CSSProperties = {
-  width: '100%', maxHeight: '70vh', background: 'var(--surface)', borderTopLeftRadius: 'var(--radius)', borderTopRightRadius: 'var(--radius)',
+  width: '100%', maxHeight: '70vh', overflow: 'auto', background: 'var(--surface)', borderTopLeftRadius: 'var(--radius)', borderTopRightRadius: 'var(--radius)',
   boxShadow: 'var(--shadow)', padding: 'calc(var(--spacing) * 2)',
 };
 
