@@ -10,14 +10,15 @@
 - [x] N18 抽取 useFieldOps（字段新增/删除/重命名/类型变更与颜色规则联动）
 - [x] N19 抽取 useSelectionEditing（选区编辑与批量填充、删除、粘贴协调）
 - [x] N20 抽取 useViews（视图增删改、排序与筛选、查询词管理）
-- [ ] N21 抽取 useOverlays（ProtectDrawer、FieldDrawer、ConditionBuilder、QueryModal 的开关与状态）
-- [ ] N22 顶部 TopBar 组件拆分（工具栏、Tabs、Breadcrumb 归位与解耦）
+- [x] N21 抽取 useOverlays（ProtectDrawer、FieldDrawer、ConditionBuilder、QueryModal 的开关与状态）
+- [ ] N22 顶部 TopBar 组件拆分（工具栏、Tabs、Breadcrumbs 归位与解耦）
 - [ ] N23 App.tsx 行数目标降至 400–500 行（不改功能）
 
 ## 当前执行节点
-- N21 useOverlays：进行中（集中管理视图保护抽屉、字段抽屉、筛选与颜色规则抽屉的开关；QueryModal 继续由 useViews 管理查询态）
-  - 范围：新增 `src/hooks/useOverlays.ts`，提供 `open/close` API；在 `App.tsx` 接入并移除分散状态。
-  - 目标：减少容器层状态与回调体积，统一入口（Toolbar/Tabs/DataTable）调用。
+- N22 TopBar 拆分：进行中（解耦 Tabs/Toolbar，并为后续 Breadcrumb 预留位）
+  - 范围：新增 `components/topbar/HeaderTabs.tsx` 与 `components/topbar/MainToolbar.tsx` 包装组件；在 `App.tsx` 接入，移除内联 Tabs/Toolbar。
+  - 目标：降低 `App.tsx` 体积（向 400–500 行靠近），维持现有 API 与视觉不变；为后续面包屑扩展预留容器位。
+  - 验证：`npm run test:run` 全通过；预览端口 `5173/5174` 无报错。
 
 ## 执行者操作清单（严格）
 - 每次拆分：仅抽取内联逻辑到 hook/组件，保持现有 API 与行为；不引入新功能。
@@ -32,7 +33,8 @@
 ## 变更日志（最新）
 - 2025-10-30：完成 N19 `useSelectionEditing` 并在 App.tsx/DataTable 接入；支持无历史包装器调度 `setData`；测试与预览通过。
 - 2025-10-30：完成 N20 `useViews` 组合 Hook（`useFilterGroup` + `useViewConfig` + `useViewQuery`），App.tsx 接入并移除分散逻辑；测试与预览通过。
-- 2025-10-30：开始 N21 `useOverlays`，新增 Hook 并在 App.tsx 接入，替换 `protectOpen/fieldDrawerOpen/filterOpen/colorOpen` 与相关回调。
+- 2025-10-30：完成 N21 `useOverlays`：App.tsx 全量接入；Toolbar/ConditionBuilder/ColorRulesDrawer/FieldDrawer 改用 open*/close*；恢复 FieldDrawer 完整 props；全局扫描移除内联 set*Open；保留 useOverlays.ts 内部 set* 实现与 HeaderMenu.tsx 局部状态；`npm run test:run` 通过，预览无误。
+- 2025-10-30：开始 N22 TopBar 拆分：新增 `HeaderTabs/MainToolbar` 包装组件并接入 PageLayout；不更改 UI 与行为；测试与预览通过。
 - 2025-10-30：完善 N18/N19：Toolbar 注入 `onCreateField` 打开 FieldDrawer；`useFieldOps` 封装选项删减数据清理；接入批量填充快捷键并在 DataTable/GridSurface 连接 `onFillKey`；测试与预览通过。
 - 2025-10-30：新增 `useSelectionRange`、`useClipboard`、`useColumnResize`、`useKeyboard` 并在 DataTable 接入；移除 DataTable 内相关内联实现；构建与本地预览通过。
 - 2025-10-30：开始 N17 `useHistoryState` 抽取并接入 App.tsx（进行中）。
