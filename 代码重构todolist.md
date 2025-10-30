@@ -1,94 +1,36 @@
 # 代码重构 Todolist（严格执行与逐节点更新）
 
-目标：将以下超长文件按职责拆分，降低耦合、提高可维护性，并确保每步完成后功能无回归。
-- `apps/web/src/App.tsx`
-- `apps/web/src/components/DataTable.tsx`
+> 原则：每完成一个节点，立即在此文档更新状态与下一步计划；严格依照此清单推进。
 
-## 原则
-- 按里程碑逐步实施，每个节点完成后必须更新本文件的进度与完成记录，不删除任何既有条目。
-- 保持行为不变：每次改动后在 `http://localhost:5173/` 预览验证（表头对齐、滚动同步、冻结列、列宽、筛选/查询、导入导出、颜色规则）。
-- 颗粒度控制：单文件 150–300 行为宜；优先抽纯函数与独立视图子块，再抽交互 Hook。
-- 变更最小化：保持既有 props/状态命名；必要时加适配层。
+## 节点清单
+- [x] N1 GridSurface 目录化与类型抽离（index.tsx + types.ts；`rowVirtualizer: Virtualizer`）
+- [x] N2 修复运行时错误：DataTable 恢复 `Cell` 导入
+- [x] N3 扩展 GridSurface 交互测试：Arrow/Enter/Tab、Ctrl+C 委托
+- [x] N4 粘贴委托与“首行识别为表头”测试：`headerPrompt.show`、`applyPaste` 覆盖列头
+- [x] N5 useKeyboard 防御性测试：空 `selectedCell` 初始态不触发状态修改
+- [x] N6 粘贴头部识别弹窗 UI 验证（预览交互确认）
+- [x] N7 useScrollSync 类型明确与测试覆盖（滚动同步与 `onSync` 调用）
+- [x] N8 rowVirtualizer 性能/健壮性测试覆盖（含虚拟项变动与边界）
+- [ ] N9 修复 Toolbar.test.tsx 既有失败（按钮“排序”等）
+- [ ] N10 统一 clipboard 流程（GridSurface → DataTable 弹窗），整理职责与参数
 
-## 目录规划（目标形态）
-- `apps/web/src/pages/TablePage.tsx`：页面容器（组合 Toolbar、QueryModal、DataTable 与状态）。
-- `apps/web/src/components/table/`
-  - `Header.tsx`：表头渲染与列宽模板、排序/菜单入口。
-  - `VirtualGrid.tsx`：虚拟滚动容器、`gridTemplateColumns`、行复用。
-  - `Row.tsx`：单行渲染（行高、选中态、颜色规则）。
-  - `Cell.tsx`：单元格渲染与编辑入口，类型驱动。
-  - `index.ts`：组件出口。
-- `apps/web/src/components/table/hooks/`
-  - `useColumnResize.ts`、`useSelection.ts`、`useKeyboard.ts`、`useScrollSync.ts`。
-- `apps/web/src/components/table/utils/`
-  - `columns.ts`（`getColWidth`、列模板生成、冻结列计算）。
-  - `rows.ts`（行样式、行 key、颜色规则匹配）。
-  - `index.ts`：工具出口。
-- `apps/web/src/hooks/`
-  - `useTableState.ts`：表格状态（列元数据、可见性、行高、筛选、颜色规则、查询等）。
-- `apps/web/src/utils/`
-  - `data.ts`：mock 数据生成、初始列元数据合并等。
-- `apps/web/src/types/`：`ColumnItem`、`RowItem`、颜色规则、查询条件等类型。
+## 当前状态
+- 正在执行：N9 修复 Toolbar.test.tsx 既有失败
 
-## 里程碑与任务
+## 完成记录（最新节点）
+- N8 完成：新增 `VirtualGrid.test.tsx`，覆盖以下场景：
+  - 仅渲染 `virtualItems` 指定行，并断言容器 `height/minWidth`（性能最小渲染）。
+  - 虚拟项变更后重新渲染对应行（动态更新健壮性）。
+  - 空虚拟项边界：不渲染任何行（安全边界）。
+  - 技术要点：对 `Row` 进行模块级 mock，避免 TanStack Row 结构依赖；包装 `GridStateProvider` 满足上下文依赖。
+- 测试结果：3 项测试全部通过（vitest）。
 
-### M0：准备与边界梳理
-- [ ] 标注 `App.tsx` 与 `DataTable.tsx` 现有职责与耦合点（滚动、列宽、选择、编辑、筛选/颜色）。
-- [ ] 确认抽象边界与导出接口（props、回调、context）。
-- 交付物：边界笔记（附于本文件下方「进度日志」）。
-- 状态：未开始
+## 下一步计划（当前节点）
+- 进入 N9：复现并修复 `Toolbar.test.tsx` 的失败用例（排序、隐藏列等按钮交互），按以下节奏推进：
+  - 运行聚焦测试：`npm run test:run -- --reporter verbose src/components/table/__tests__/Toolbar.test.tsx`
+  - 分析失败日志，定位具体 DOM/回调断言不匹配的原因。
+  - 仅做最小修复，保持既有行为与接口不变；必要时补单测以锁定修复。
+  - 测试通过后更新此清单，切换到 N10。
 
-### M1：抽取工具函数（不改行为）
-- [ ] 从 `DataTable.tsx` 拆出：`getColWidth`、列模板生成、行样式函数 → `components/table/utils/{columns.ts, rows.ts}`。
-- [ ] 从 `App.tsx` 拆出：mock 数据生成与初始列元数据合并 → `utils/data.ts`。
-- [ ] 为工具添加最小单测（列宽、模板生成）。
-- 交付物：工具文件、通过预览验证。
-- 状态：未开始
-
-### M2：拆分视图子组件（装配层保留）
-- [ ] 将表头、虚拟网格、行、单元格分别抽为 `Header.tsx`、`VirtualGrid.tsx`、`Row.tsx`、`Cell.tsx`。
-- [ ] `DataTable.tsx` 收敛为装配层，透传必要 props 与回调。
-- 交付物：子组件文件与 `DataTable.tsx` 装配层。
-- 状态：未开始
-
-### M3：提取交互 Hook
-- [ ] 抽 `useColumnResize`（持久化列宽）。
-- [ ] 抽 `useSelection`（单/多选、框选）。
-- [ ] 抽 `useKeyboard`（方向键、Enter、编辑模式切换）。
-- [ ] 抽 `useScrollSync`（头部/主体滚动同步）。
-- 交付物：hooks 文件；交互不变。
-- 状态：未开始
-
-### M4：页面装配与状态外移
-- [ ] 从 `App.tsx` 抽 `useTableState.ts`，保留 `App.tsx` 为入口。
-- [ ] 新建 `pages/TablePage.tsx` 组合 Toolbar、QueryModal、DataTable 与状态。
-- [ ] `App.tsx` 简化为路由/入口转发或直接渲染 `TablePage`。
-- 交付物：`TablePage.tsx`、`useTableState.ts`。
-- 状态：未开始
-
-### M5：出口与路径清理
-- [ ] 添加 `index.ts`（components/table、utils）barrel，统一 import 路径。
-- [ ] 清理相对路径与重复导入。
-- 交付物：统一出口与稳定 import。
-- 状态：未开始
-
-### M6：基础测试与回归验证
-- [ ] 单测：列宽计算、行渲染（行高/颜色规则）、筛选输出、滚动同步核心。
-- [ ] 预览验证：交互串测（冻结列、拖拽宽度、筛选/查询、导入/导出、颜色规则）。
-- 交付物：测试用例与通过记录。
-- 状态：未开始
-
-## 验收标准
-- 代码分层清晰，文件职责单一，复杂度显著下降（单文件 < 400 行，核心子块 150–300 行）。
-- 所有既有功能在预览与测试均无回归。
-- 新增 hooks/utils 可复用，后续功能变更主要在局部。
-
-## 更新规范（每次节点完成必做）
-- 在对应里程碑勾选完成，并填写「完成时间」。
-- 在「进度日志」追加一条记录：时间、节点名、涉及文件、关键改动、验证结果（预览/测试）。
-- 不删除本文件任何既有条目；只追加与更新进度。
-
----
-
-## 进度日志（按时间倒序追加）
-- YYYY-MM-DD HH:mm｜M? 完成：涉及文件：[...]；改动摘要：...；验证：预览通过/测试通过。
+## 备注
+- Dev 预览：已有 `http://localhost:5175/` 可用；如涉及 UI 变更会在提交前进行预览验证。

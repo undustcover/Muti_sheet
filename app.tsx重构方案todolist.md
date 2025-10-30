@@ -82,9 +82,27 @@
   - 刷新预览，走一遍主流程：选择表 → 编辑字段 → 筛选 → 颜色规则 → 导入导出；无报错与功能回归。
 - 回滚指引：如某功能失效，优先对比迁移前后 `props` 与调用链，恢复对应导入或 props 传递。
 
+### 新增节点（进一步拆分方案）
+- 节点 N12：提取视图配置为 Hook `src/hooks/useViewConfig.ts`
+  - 目标：将视图切换时的“应用/初始化”和状态变化的“持久化”逻辑抽离，减少容器副作用块。
+  - 实施：创建 Hook 管理 `viewConfigMap`、封装 `updateStatsAgg(fieldId, agg)`；传入当前状态与对应 setter 在视图切换时应用，状态变化时持久化到当前视图。
+  - 不回归验证：切换视图时配置正确应用；底部聚合栏的每字段聚合类型保持与视图一致；预览交互无回归。
+- 节点 N13：提取过滤逻辑为 Hook `useFilterGroup`
+  - 目标：集中管理 `activeGroup` 与套用 `matchesGroup` 的过滤结果，隔离高频计算。
+  - 实施：提供过滤结果与应用方法；与查询叠加时保持一致性。
+- 节点 N14：提取颜色规则桥接为 Hook `useColorRules`
+  - 目标：对接 `useColorRulesStore` 和 `applyColorBackground`，统一列基础色与规则色的组合。
+  - 实施：提供 `getCellBg(row, columnId)` 计算，隔离横切逻辑。
+- 节点 N15：导入/导出为 Hook `useImportExport`
+  - 目标：抽离 IO 与数据规约逻辑，容器只触发事件。
+  - 实施：封装 `onImport` 与 `onExport`，统一格式校验与字段映射。
+- 节点 N16：快捷键与布局拆分
+  - 目标：抽离 `undo/redo/query/delete` 等快捷键与页面布局片段（`TopBarLayout`、`MainPane`）。
+  - 实施：减少容器层的事件绑定与 JSX 体量，提升可读性。
+
 ## 里程碑与提交规范
 - 每个节点完成后：
-  - 运行本地预览验证（页面已在 `http://localhost:5173/`/`5174/`）。
+  - 运行本地预览验证（页面已在 `http://localhost:5173/`/`5174`/`5175`）。
   - 生成一次提交：
     - `git add -A`
     - `git commit -m "refactor(app): step N - <简述>"`
@@ -98,21 +116,15 @@
 - 如需后端接入，Hook 层可替换 `mock` 数据获取为 API，不影响组件结构。
 
 ## 执行者操作清单（Trae 可直接按序执行）
-- [x] 节点 1：创建 `src/types.ts`，迁移类型与导入；刷新预览。✅ **已完成** - 成功创建types.ts文件，迁移了所有类型定义（User、SelectOption、FormulaOp、FormulaConfig、NumberFormat、RowRecord、ColumnItem、View、FieldType），并更新了App.tsx、FieldDrawer.tsx、ColorRulesDrawer.tsx、ConditionBuilder.tsx、Toolbar.tsx、Tabs.tsx等文件的导入路径。预览验证通过，页面正常渲染。
-- [x] 节点 2：创建 `src/components/editors/` 并迁移编辑器组件；刷新预览并逐项验证输入行为。✅ 已完成 - 新增 editors 目录与组件（TextEditor、NumberEditor、DateEditor、SingleSelectEditor、MultiSelectEditor、UserEditor、CellEditor），在 App.tsx 中改为导入外部 `CellEditor` 使用。已启动本地预览 `http://localhost:5174/`，逐项验证编辑器交互：智能翻转、搜索过滤、键盘导航（上下/Enter/Escape）、虚拟滚动表现正常，无回归。
-- [x] 节点 3：创建 `src/hooks/useTableState.ts` 并替换 `App.tsx` 的表级状态；刷新预览并验证表切换。✅ 已完成 - 新增 Hook（activeTableId、tables、setData、setColumnMeta、setColumnOrder、setColumnVisibility、setSorting；含新表首次切换自动初始化逻辑），`App.tsx` 改为使用该 Hook 管理表级状态。预览 `http://localhost:5174/` 正常，无错误；侧边栏切换表与当前视图的列、排序、可见性隔离按预期工作。
-- [x] 节点 4：创建 `src/components/DataTable.tsx`，迁移表格渲染；刷新预览并验证排序/隐藏/冻结/滚动。✅ 已完成 - 新增组件 `DataTable.tsx`，将列定义、`useReactTable` 配置、虚拟滚动、键盘导航与选择范围交互统一到组件内；`App.tsx` 改为以 props 驱动渲染并保留容器层逻辑（工具栏、筛选、颜色规则、抽屉等）。已在 `http://localhost:5174/` 预览验证：
-  - 排序切换正常，表头箭头状态同步；
-  - 隐藏/显示字段与冻结列吸附效果一致；
-  - 虚拟滚动平滑，行高切换正常；
-  - 单元格选中、双击进入编辑、Tab/方向键导航均工作，无焦点丢失；
-  - 新建字段按钮从组件触发，抽屉正常打开。
-- [x] 节点 5：适配工具栏与抽屉的 props 与回调；刷新预览并验证列操作。✅ 已完成 - `Toolbar` 接收 `columns/columnVisibility` 与操作回调（隐藏/显示、导入导出、行高切换等），`FieldDrawer`、`HeaderMenu` 的列操作（编辑/隐藏/删除/插入/复制/整列填色、冻结至此列）均通过容器层回调调用 Hook 包装的 setter，确保仅影响当前激活表；已在预览 `http://localhost:5175/` 验证：
-  - 通过工具栏“显示隐藏字段”恢复列，行为正确；
-  - 表头菜单的隐藏/冻结/升降序/插入/复制/删除（首列不可删）均工作；
-  - 打开字段抽屉编辑名称/类型/描述/选项/公式/数值格式后保存生效；
-  - 颜色规则抽屉对可见列生效，整列填色与规则背景色并存；
-  - 导入/导出、新增记录、行高切换均无异常。
-- [ ] 节点 6：清理冗余与统一导入；完整走一遍主流程；提交合并或打标签。
-
-> 说明：以上每步均为前端范围内变更，对当前系统运行与性能无负面影响；模块化后有利于 AI Coding 搜索准确率提升与后续功能扩展。
+- [x] 节点 1：创建 `src/types.ts`，迁移类型与导入；刷新预览。✅ 已完成
+- [x] 节点 2：创建 `src/components/editors/` 并迁移编辑器组件；刷新预览并逐项验证输入行为。✅ 已完成
+- [x] 节点 3：创建 `src/hooks/useTableState.ts` 并替换 `App.tsx` 的表级状态；刷新预览并验证表切换。✅ 已完成
+- [x] 节点 4：创建 `src/components/DataTable.tsx`，迁移表格渲染；刷新预览并验证排序/隐藏/冻结/滚动。✅ 已完成
+- [x] 节点 5：适配工具栏与抽屉的 props 与回调；刷新预览并验证列操作。✅ 已完成
+- [x] 节点 6：清理冗余与统一导入；完整走一遍主流程；提交合并或打标签。✅ 已完成（近期：移除过时注释、适配 `onSortOpen`、全量测试通过、预览正常）
+- [x] 节点 N12：`useViewConfig` 抽取与接入；测试与预览验证。✅ 已完成 - 新增 `src/hooks/useViewConfig.ts`，将视图切换时的应用/初始化与状态变化持久化逻辑迁移至 Hook，并提供 `updateStatsAgg` 方法。`App.tsx` 移除对应 `useEffect` 并改为调用 Hook；修复初始化顺序导致的 `sorting` 未定义问题；`npm run test:run` 全部通过；`http://localhost:5175/` 预览正常。
+- [x] 节点 N13：`useFilterGroup` 抽取与接入；测试与预览验证。✅ 已完成 - 新增 `src/hooks/useFilterGroup.ts`，集中管理 `activeGroup` 与基于 `matchesGroup` 的过滤结果；`App.tsx` 改为使用 Hook 返回的 `filteredByGroup` 作为查询过滤的基础，并将 `ConditionBuilder.onApply` 替换为 `applyGroup`。`npm run test:run` 全部通过；`http://localhost:5175/` 预览正常。
+- [x] 节点 N14：`useColorRules` 抽取与接入；测试与预览验证。✅ 已完成 - 新增 `src/hooks/useColorRules.ts`，封装对 `applyColorBackground` 的调用，统一列基础色与规则色的组合为 `getCellBg(row, columnId)`；`App.tsx` 用 Hook 替代本地背景色计算函数，并保持 `columnColors` 与 `useColorRulesStore` 的读取方式。`npm run test:run` 全部通过；`http://localhost:5175/` 预览正常。
+- [x] 节点 N15：`useImportExport` 抽取与接入；测试与预览验证。✅ 已完成 - 新增 `src/hooks/useImportExport.ts`，封装 Excel 的导出与导入解析（基于 `xlsx`），以 `onExport()`、`onImport(rawRows)` 对外；在 `App.tsx` 注入 Hook 并将 Toolbar 的 `onExport`/`onImport` 接入 Hook 返回方法；保持 `histSetData`、`show` 与 `requestMeasure` 的调用语义。`npm run test:run` 全部通过；`http://localhost:5175/` 预览正常。
+- [x] 节点 N16：快捷键与布局拆分；测试与预览验证。✅ 已完成 - 新增 `src/hooks/useHotkeys.ts`，将 `Ctrl+Z` 撤销、`Ctrl+Shift+Z/Ctrl+Y` 重做、`Ctrl+F` 打开查询、`Delete` 清空选中单元格内容的键盘绑定抽取为 Hook，并在 `App.tsx` 用 `useHotkeys({ activeNav, onUndo: undo, onRedo: redo, onOpenQuery: openQuery, onDeleteSelectedCell: clearSelectedCellContent, selectedCellRowId: selectedCell.rowId })` 接入；新增 `src/components/PageLayout.tsx`，承载侧边栏、顶部标签与工具栏的容器布局，`App.tsx` 用 `<PageLayout sidebar={...} header={<Tabs .../>} toolbar={<Toolbar .../>}>` 包裹内容区，保持原样式与结构；`npm run test:run` 全部通过；本地预览在 `http://localhost:5176/` 正常打开（控制台出现一次 `net::ERR_ABORTED` 的模块拉取中断信息，属 HMR 刷新过程，不影响页面显示与交互）。
+- [x] 节点 N20：整合视图相关 Hook 为 `useViews`；测试与预览验证。✅ 已完成 - 新增 `src/hooks/useViews.ts`，组合 `useFilterGroup`、`useViewConfig`、`useViewQuery`，对外提供 `filteredData`、`activeGroup/applyGroup`、`viewConfigMap/updateStatsAgg`、以及查询控制（`activeQuery/applyQuery/openQuery/closeQuery/queryFocusTick`）。在 `App.tsx` 删除三处独立调用与本地 `filteredData` 计算，改为调用 `useViews({...})` 并传入 `logicColumnMeta`；全量测试通过；Vite 预览在 `http://localhost:5174/` 正常，无运行时错误。

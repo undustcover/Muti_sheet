@@ -25,27 +25,23 @@ type Props = {
   activeQuery?: string;
   onApplyQuery?: (q: string) => void;
   queryFocusTick?: number;
+  // 新增：分组与排序入口（用于兼容既有测试）
+  onGroupOpen?: () => void;
+  onSortOpen?: () => void;
+  // 新增：新增字段入口（打开 FieldDrawer 创建字段）
+  onCreateField?: () => void;
+  // 新增：编辑字段入口（打开 FieldDrawer 编辑字段）
+  onEditField?: (id: string) => void;
 };
 
-export const Toolbar: React.FC<Props> = ({ columns, onColumnsChange, rowHeight, onRowHeightChange, onFilterOpen, onColorOpen, onShowAllHidden, onAddRecord, onImport, onExport, columnVisibility, onToggleFieldVisibility, onUndo, onRedo, onQuery, onDelete, activeQuery, onApplyQuery, queryFocusTick }) => {
+export const Toolbar: React.FC<Props> = ({ columns, onColumnsChange, rowHeight, onRowHeightChange, onFilterOpen, onColorOpen, onShowAllHidden, onAddRecord, onImport, onExport, columnVisibility, onToggleFieldVisibility, onUndo, onRedo, onQuery, onDelete, activeQuery: _activeQuery, onApplyQuery: _onApplyQuery, queryFocusTick, onGroupOpen, onSortOpen, onCreateField, onEditField }) => {
   const [fieldOpen, setFieldOpen] = useState(false)
   const [rowHeightOpen, setRowHeightOpen] = useState(false)
-  const [editTarget, setEditTarget] = useState<ColumnItem | null>(null)
-  const [editName, setEditName] = useState('')
-  const [editType, setEditType] = useState('text')
   const fileRef = useRef<HTMLInputElement | null>(null)
   const rowHeightRef = useRef<HTMLDivElement | null>(null)
   const closeTimerRef = useRef<number | null>(null)
   const fieldCloseTimerRef = useRef<number | null>(null)
   const queryInputRef = useRef<HTMLInputElement | null>(null)
-
-  const typeOptions = useMemo(() => ['text', 'single', 'multi', 'user', 'number', 'date', 'attachment', 'formula', 'creator', 'modifier', 'created_at', 'updated_at'], [])
-
-  const applyEdit = () => {
-    if (!editTarget) return
-    onColumnsChange(columns.map(c => c.id === editTarget.id ? { ...c, name: editName, type: editType } : c))
-    setEditTarget(null)
-  }
 
   const cancelClose = () => {
     if (closeTimerRef.current) {
@@ -106,6 +102,13 @@ export const Toolbar: React.FC<Props> = ({ columns, onColumnsChange, rowHeight, 
           </button>
           {fieldOpen && (
             <div style={{ position: 'absolute', top: '100%', left: 0, background: '#fff', border: '1px solid #ddd', borderRadius: 'var(--radius)', minWidth: 260, zIndex: 60, boxShadow: 'var(--shadow)' }}>
+              {/* 新增字段入口 */}
+              {onCreateField && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--spacing)', borderBottom: '1px solid #eee' }}>
+                  <span style={{ fontWeight: 600 }}>新增字段</span>
+                  <button onClick={() => { onCreateField(); setFieldOpen(false); }} style={{ fontSize: 12 }}>+ 新建</button>
+                </div>
+              )}
               {columns.map((c) => {
                 const isVisible = (columnVisibility?.[c.id] !== false);
                 return (
@@ -125,7 +128,7 @@ export const Toolbar: React.FC<Props> = ({ columns, onColumnsChange, rowHeight, 
                       ) : (
                         <span title="后台字段，固定隐藏" style={{ opacity: 0.5 }}>🔒</span>
                       )}
-                      <span style={{ cursor: 'pointer' }} onClick={() => { setEditTarget(c); setEditName(c.name); setEditType(c.type); }}>···</span>
+                      <span style={{ cursor: 'pointer' }} onClick={() => { onEditField && onEditField(c.id); setFieldOpen(false); }}>···</span>
                     </div>
                   </div>
                 );
@@ -139,6 +142,14 @@ export const Toolbar: React.FC<Props> = ({ columns, onColumnsChange, rowHeight, 
             <span>筛选</span>
           </span>
         </button>
+        {onSortOpen && (
+          <button onClick={onSortOpen}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <IconFilter color={iconColor} />
+              <span>排序</span>
+            </span>
+          </button>
+        )}
         <div
           ref={rowHeightRef}
           style={{ position: 'relative' }}
@@ -237,24 +248,6 @@ export const Toolbar: React.FC<Props> = ({ columns, onColumnsChange, rowHeight, 
           <IconComment color={iconColor} />
         </span>
       </div>
-
-      {editTarget && (
-        <div style={{ position: 'fixed', left: '50%', top: '20%', transform: 'translateX(-50%)', background: '#fff', border: '1px solid #ddd', borderRadius: 'var(--radius)', padding: 'calc(var(--spacing) * 2)', zIndex: 40, width: 420 }}>
-          <div style={{ fontWeight: 700, marginBottom: 8 }}>编辑字段</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 8, alignItems: 'center' }}>
-            <div>标题</div>
-            <input value={editName} onChange={(e) => setEditName(e.target.value)} />
-            <div>类型</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <select value={editType} onChange={(e) => setEditType(e.target.value)}>
-                {typeOptions.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-              <button onClick={() => applyEdit()}>保存</button>
-              <button onClick={() => setEditTarget(null)}>取消</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
