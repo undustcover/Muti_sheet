@@ -85,6 +85,26 @@ export function useTableState(params: UseTableStateParams) {
     });
   };
 
+  // 在不切换 activeTableId 的情况下，创建/覆盖某个表的结构与数据
+  const createTable = (tableId: string, config: {
+    columnMeta: Record<string, { name: string; type: string; description?: string; options?: SelectOption[]; formula?: FormulaConfig; format?: NumberFormat }>;
+    data?: RowRecord[];
+    columnOrder?: string[];
+    columnVisibility?: Record<string, boolean>;
+    sorting?: SortingState;
+  }) => {
+    setTables(prev => ({
+      ...prev,
+      [tableId]: {
+        data: config.data ?? generateRows(initialRowCount),
+        columnMeta: config.columnMeta,
+        columnOrder: config.columnOrder ?? Object.keys(config.columnMeta),
+        columnVisibility: config.columnVisibility ?? {},
+        sorting: config.sorting ?? [],
+      },
+    }));
+  };
+
   // 当切换到新的表 ID 时，初始化其默认结构与数据
   useEffect(() => {
     setTables(prev => {
@@ -116,5 +136,6 @@ export function useTableState(params: UseTableStateParams) {
     setColumnOrder,
     setColumnVisibility,
     setSorting,
+    createTable,
   } as const;
 }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import dayjs from 'dayjs';
 import './App.css';
 import { isFirstVisibleField } from './utils/table';
 import Sidebar from './components/Sidebar';
@@ -38,6 +39,7 @@ const initialOptions: SelectOption[] = [
 export default function App() {
   const { show } = useToast();
   const [activeNav, setActiveNav] = useState<string>('table');
+  const [externalNewTable, setExternalNewTable] = useState<{ id: string; name: string; description?: string } | null>(null);
   const tableRef = useRef<DataTableHandle | null>(null);
   const requestMeasure = () => {
     requestAnimationFrame(() => requestAnimationFrame(() => tableRef.current?.measure()));
@@ -86,6 +88,7 @@ export default function App() {
     setColumnOrder,
     setColumnVisibility,
     setSorting,
+    createTable,
   } = useTableState({ initialTableId: 'tbl-1', initialColumnMeta, generateRows: generateMockRows, initialRowCount: 15 });
 
   // 永久隐藏 id（首字段）
@@ -245,8 +248,63 @@ export default function App() {
     }
   }, [visibleCount, freezeCount]);
 
-  // 导入/导出
-  const { onExport, onImport } = useImportExport({ data, setData: histSetData, columnMeta, show, requestMeasure });
+  // 导入/导出（保留导出使用旧钩子，导入改为创建新表）
+  const { onExport } = useImportExport({ data, setData: histSetData, columnMeta, show, requestMeasure });
+
+  const onImport = ({ fileName, sheetName, header, rows }: { fileName: string; sheetName: string; header: any[]; rows: any[][] }) => {
+    const newTableId = `tbl-import-${Date.now()}`;
+
+    // 生成列ID与名称
+    const colInfo = header.map((name: any, idx: number) => ({ id: `col_${idx + 1}`, name: String(name ?? `列${idx + 1}`) }));
+    // 推断列类型
+    const inferType = (values: any[]): 'text' | 'number' | 'date' => {
+      const samples = values.filter(v => v !== null && v !== undefined && String(v).trim() !== '').slice(0, 24);
+      if (samples.length === 0) return 'text';
+      const numCount = samples.filter(v => Number.isFinite(Number(v))).length;
+      const dateCount = samples.filter(v => dayjs(String(v)).isValid()).length;
+      if (dateCount > numCount && dateCount >= samples.length * 0.6) return 'date';
+      if (numCount > 0 && numCount >= samples.length * 0.6) return 'number';
+      return 'text';
+    };
+    const nextMeta: Record<string, { name: string; type: string }> = {};
+    colInfo.forEach((c, idx) => {
+      const colValues = rows.map(r => r?.[idx]);
+      const t = inferType(colValues);
+      nextMeta[c.id] = { name: c.name, type: t };
+    });
+    // 构造行数据
+    const nextData = rows.map((arr, i) => {
+      const obj: any = { id: `rec-${i + 1}-${Date.now()}` };
+      colInfo.forEach((c, idx) => {
+        const val = arr?.[idx];
+        const t = nextMeta[c.id].type;
+        if (t === 'number') {
+          const n = Number(val);
+          obj[c.id] = Number.isFinite(n) ? n : 0;
+        } else if (t === 'date') {
+          const d = dayjs(String(val));
+          obj[c.id] = d.isValid() ? d.toISOString() : '';
+        } else {
+          obj[c.id] = val == null ? '' : String(val);
+        }
+      });
+      return obj;
+    });
+    // 在指定的新表ID下写入结构与数据
+    createTable(newTableId, {
+      columnMeta: nextMeta as any,
+      columnOrder: colInfo.map(c => c.id),
+      data: nextData as any,
+      columnVisibility: {},
+      sorting: [],
+    });
+    // 自动切换到新表
+    setActiveTableId(newTableId);
+    // 在侧栏显示并命名为文件名
+    setExternalNewTable({ id: newTableId, name: fileName });
+    show(`已创建并切换到新表（${fileName}），导入 ${nextData.length} 行，工作表：${sheetName}`, 'success');
+    requestMeasure();
+  };
 
   // 列变更
   const onColumnsChange = (cols: ColumnItem[]) => {
@@ -326,7 +384,7 @@ export default function App() {
   return (
     <>
       <PageLayout
-        sidebar={<Sidebar active={activeNav} onNavigate={setActiveNav} />}
+        sidebar={<Sidebar active={activeNav} onNavigate={setActiveNav} onSelectTable={(id) => setActiveTableId(id)} externalNewTable={externalNewTable} />}
         header={(
           <TopBar
             views={views}

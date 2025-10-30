@@ -5,6 +5,7 @@ type Props = {
   active: string;
   onNavigate: (key: string) => void;
   onSelectTable?: (tableId: string) => void;
+  externalNewTable?: { id: string; name: string; description?: string } | null;
 };
 
 type DataTable = { id: string; name: string; description: string };
@@ -160,7 +161,7 @@ const Modal: React.FC<{ open: boolean; title: string; children: React.ReactNode;
   );
 };
 
-export const Sidebar: React.FC<Props> = ({ active, onNavigate, onSelectTable }) => {
+export const Sidebar: React.FC<Props> = ({ active, onNavigate, onSelectTable, externalNewTable }) => {
   // 保留 active 参数避免未来用到，同时避免未使用参数报错
   void active;
   const [projects, setProjects] = useState<Project[]>([{
@@ -242,6 +243,22 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate, onSelectTable }) 
     closeCompose();
   };
   // 已弃用的新增函数（未使用），移除以通过 noUnusedLocals 检查
+
+  // 外部注入的新建数据表：默认追加到项目 p-1 / 任务 t-1
+  useEffect(() => {
+    if (!externalNewTable) return;
+    const { id, name, description = '' } = externalNewTable;
+    // 若已存在则忽略
+    const exists = projects.some(p => p.tasks.some(t => t.tables.some(tb => tb.id === id)));
+    if (exists) return;
+    setProjects(prev => prev.map(p => p.id === 'p-1' ? {
+      ...p,
+      tasks: p.tasks.map(t => t.id === 't-1' ? { ...t, tables: [...t.tables, { id, name, description }] } : t)
+    } : p));
+    setExpandedProjects(e => ({ ...e, ['p-1']: true }));
+    setExpandedTasks(e => ({ ...e, ['t-1']: true }));
+    // 仅追加到列表，不自动切换激活表
+  }, [externalNewTable]);
 
   const renameProject = (projectId: string) => {
     const name = (window.prompt('重命名项目') || '').trim();

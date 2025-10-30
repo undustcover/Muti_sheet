@@ -11,7 +11,7 @@ type Props = {
   onColorOpen: () => void;
   onShowAllHidden?: () => void;
   onAddRecord: () => void;
-  onImport?: (rows: any[]) => void;
+  onImport?: (payload: { fileName: string; sheetName: string; header: any[]; rows: any[][] }) => void;
   onExport?: () => void;
   // 新增：字段显示/隐藏控制
   columnVisibility?: Record<string, boolean | undefined>;
@@ -219,10 +219,17 @@ export const Toolbar: React.FC<Props> = ({ columns, onColumnsChange, rowHeight, 
                   if (!data) return;
                   import('xlsx').then((XLSX) => {
                     const wb = XLSX.read(data as ArrayBuffer, { type: 'array' });
-                    const ws = wb.Sheets[wb.SheetNames[0]];
+                    const sheetName = wb.SheetNames[0];
+                    const ws = wb.Sheets[sheetName];
                     const json = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
-                    const [, ...rows] = json;
-                    onImport(rows);
+                    const header = (json[0] ?? []) as any[];
+                    const rows = json.slice(1) as any[][];
+                    const fileName = (file.name || '导入表').replace(/\.(xlsx|xls)$/i, '');
+                    const confirmed = window.confirm(
+                      `确认导入 Excel?\n\n文件: ${fileName}\n工作表: ${sheetName}\n列数: ${header.length}\n行数: ${rows.length}`
+                    );
+                    if (!confirmed) { e.target.value = ''; return; }
+                    onImport?.({ fileName, sheetName, header, rows });
                   });
                 };
                 reader.readAsArrayBuffer(file);
