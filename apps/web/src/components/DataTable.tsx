@@ -87,7 +87,9 @@ const DataTable = forwardRef<DataTableHandle, Props>(({
   onCreateField,
 }, ref) => {
   const columns = useMemo<ColumnDef<RowRecord, any>[]>(() => {
-    const normalizeType = (t: string) => (t === 'single' ? 'select' : t === 'multi' ? 'multiSelect' : t);
+    const normalizeType = (t: string) => (
+      (t === 'single' || t === 'singleSelect') ? 'select' : (t === 'multi' ? 'multiSelect' : t)
+    );
     const makeDef = (id: string): ColumnDef<RowRecord, any> | null => {
       const meta = columnMeta[id];
       if (!meta || columnVisibility[id] === false) return null;

@@ -499,6 +499,25 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate, onSelectTable, ex
     ))}
   </div>
   <div style={{ borderTop: '1px solid #eee', margin: '8px 0' }} />
+  <SectionTitle title="视图" />
+  <div>
+    <Row
+      label={<span>查询页</span>}
+      active={active === 'query'}
+      onClick={() => { onNavigate('query'); }}
+    />
+    <Row
+      label={<span>看板</span>}
+      active={active === 'kanban'}
+      onClick={() => { onNavigate('kanban'); }}
+    />
+    <Row
+      label={<span>日历</span>}
+      active={active === 'calendar'}
+      onClick={() => { onNavigate('calendar'); }}
+    />
+  </div>
+  <div style={{ borderTop: '1px solid #eee', margin: '8px 0' }} />
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, color: '#8a8a8a', padding: '8px 12px', textTransform: 'uppercase' }}>
     <span>新增</span>
   </div>

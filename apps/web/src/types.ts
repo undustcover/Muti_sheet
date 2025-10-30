@@ -28,4 +28,18 @@ export type ColumnItem = { id: string; name: string; type: string };
 export type View = { id: string; name: string; protect: 'public' | 'locked' | 'personal' };
 
 // 字段类型
-export type FieldType = 'text' | 'number' | 'date' | 'single' | 'multi' | 'user' | 'relation' | 'formula';
+// 扩展：新增 attachment 与 singleSelect（作为 single 的别名）
+export type FieldType =
+  | 'text'
+  | 'number'
+  | 'date'
+  | 'single'
+  | 'singleSelect'
+  | 'multi'
+  | 'user'
+  | 'relation'
+  | 'formula'
+  | 'attachment';
+
+// 附件项类型（用于 Attachment 字段显示/扩展）
+export type AttachmentItem = { id: string; name: string; url?: string; size?: number };

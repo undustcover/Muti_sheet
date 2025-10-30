@@ -1,21 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import type { View } from '../types';
+import type { ViewKind } from '../services/viewsStore';
 
 type Props = {
   views: View[];
   activeId: string;
   onSelect: (id: string) => void;
-  onAdd: () => void;
+  onAddWithKind: (kind: ViewKind) => void;
   onRename: (id: string, name: string) => void;
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
   onProtectClick: (id: string) => void;
 };
 
-export const Tabs: React.FC<Props> = ({ views, activeId, onSelect, onAdd, onRename, onDuplicate, onDelete, onProtectClick }) => {
+export const Tabs: React.FC<Props> = ({ views, activeId, onSelect, onAddWithKind, onRename, onDuplicate, onDelete, onProtectClick }) => {
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [renameFor, setRenameFor] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [addOpen, setAddOpen] = useState(false);
+  const addBtnRef = useRef<HTMLButtonElement | null>(null);
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing)' }}>
@@ -72,7 +75,27 @@ export const Tabs: React.FC<Props> = ({ views, activeId, onSelect, onAdd, onRena
           </div>
         );
       })}
-      <button onClick={onAdd} style={{ padding: '6px 10px', borderRadius: 'var(--radius)' }}>+ 新建视图</button>
+      <div style={{ position: 'relative' }}>
+        <button ref={addBtnRef} onClick={() => setAddOpen((o) => !o)} style={{ padding: '6px 10px', borderRadius: 'var(--radius)' }}>+ 新建视图 ▾</button>
+        {addOpen && (
+          <div
+            style={{
+              position: 'absolute', top: '110%', right: 0, zIndex: 50,
+              background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', boxShadow: 'var(--shadow)', minWidth: 180
+            }}
+            onMouseLeave={() => setAddOpen(false)}
+          >
+            <div style={{ padding: 'var(--spacing)', cursor: 'pointer' }} onClick={() => { onAddWithKind('table'); setAddOpen(false); }}>表格视图</div>
+            <div style={{ padding: 'var(--spacing)', cursor: 'pointer' }} onClick={() => { onAddWithKind('query'); setAddOpen(false); }}>查询页视图</div>
+            <div style={{ padding: 'var(--spacing)', cursor: 'pointer' }} onClick={() => { onAddWithKind('kanban'); setAddOpen(false); }}>看板视图</div>
+            <div style={{ padding: 'var(--spacing)', cursor: 'pointer' }} onClick={() => { onAddWithKind('calendar'); setAddOpen(false); }}>日历视图</div>
+            <div style={{ borderTop: '1px solid var(--border)' }} />
+            <div style={{ padding: 'var(--spacing)', cursor: 'pointer', opacity: 0.85 }} onClick={() => { onAddWithKind('gantt'); setAddOpen(false); }}>甘特图视图（占位）</div>
+            <div style={{ padding: 'var(--spacing)', cursor: 'pointer', opacity: 0.85 }} onClick={() => { onAddWithKind('gallery'); setAddOpen(false); }}>画册视图（占位）</div>
+            <div style={{ padding: 'var(--spacing)', cursor: 'pointer', opacity: 0.85 }} onClick={() => { onAddWithKind('form'); setAddOpen(false); }}>表单视图（占位）</div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

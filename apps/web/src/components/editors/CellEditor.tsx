@@ -6,6 +6,7 @@ import DateEditor from './DateEditor';
 import SingleSelectEditor from './SingleSelectEditor';
 import MultiSelectEditor from './MultiSelectEditor';
 import UserEditor from './UserEditor';
+import AttachmentEditor from './AttachmentEditor';
 
 export default function CellEditor({ value, onChange, type, options }: {
   value: any;
@@ -33,6 +34,9 @@ export default function CellEditor({ value, onChange, type, options }: {
   }
   if (type === 'user') {
     return <UserEditor value={value ? { id: value.id, label: value.name } : null} onChange={onChange} options={options} />;
+  }
+  if (type === 'attachment') {
+    return <AttachmentEditor value={value ?? []} onChange={onChange} />;
   }
   return <span />;
 }

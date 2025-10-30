@@ -1,6 +1,6 @@
 import type { SelectOption } from '../../types';
 
-export type EditorType = 'text' | 'number' | 'date' | 'select' | 'multiSelect' | 'relation' | 'user';
+export type EditorType = 'text' | 'number' | 'date' | 'select' | 'multiSelect' | 'relation' | 'user' | 'attachment';
 
 export interface BaseEditorProps {
   value: any;

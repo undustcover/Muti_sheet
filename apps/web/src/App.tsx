@@ -23,6 +23,9 @@ import type { SelectOption, ColumnItem, View } from './types';
 import { generateMockRows, initialColumnMeta } from './utils/data';
 import { useImportExport } from './hooks/useImportExport';
 import PageLayout from './components/PageLayout';
+import QueryView from './components/views/QueryView';
+import KanbanView from './components/views/KanbanView';
+import CalendarView from './components/views/CalendarView';
 import { useHotkeys } from './hooks/useHotkeys';
 import { useHistoryState } from './hooks/useHistoryState';
 import { useOverlays } from './hooks/useOverlays';
@@ -159,6 +162,12 @@ export default function App() {
     clearGroup,
     viewConfigMap,
     updateStatsAgg,
+    viewKind,
+    setViewKind,
+    kanbanGroupFieldId,
+    setKanbanGroupField,
+    calendarFields,
+    setCalendarFields,
     activeQuery,
     applyQuery,
     queryFocusTick,
@@ -171,6 +180,7 @@ export default function App() {
     columnMeta,
     logicColumnMeta,
     activeViewId,
+    tableId: activeTableId,
     sorting,
     freezeCount,
     columnVisibility,
@@ -390,10 +400,22 @@ export default function App() {
             views={views}
             activeViewId={activeViewId}
             onSelect={(id) => setActiveViewId(id)}
-            onAdd={() => {
+            onAddWithKind={(kind) => {
               const id = `view-${views.length + 1}`;
-              setViews(prev => [...prev, { id, name: `View ${views.length + 1}`, protect: 'public' }]);
+              const defaultName = (
+                kind === 'table' ? `表格视图 ${views.length + 1}` :
+                kind === 'query' ? `查询页 ${views.length + 1}` :
+                kind === 'kanban' ? `看板视图 ${views.length + 1}` :
+                kind === 'calendar' ? `日历视图 ${views.length + 1}` :
+                kind === 'gantt' ? `甘特图视图 ${views.length + 1}` :
+                kind === 'gallery' ? `画册视图 ${views.length + 1}` :
+                kind === 'form' ? `表单视图 ${views.length + 1}` : `View ${views.length + 1}`
+              );
+              setViews(prev => [...prev, { id, name: defaultName, protect: 'public' }]);
               setActiveViewId(id);
+              setViewKind(kind);
+              // 切换到对应视图页面
+              setActiveNav(kind);
             }}
             onRename={(id, name) => setViews(prev => prev.map(v => (v.id === id ? { ...v, name } : v)))}
             onDuplicate={(id) => {
@@ -495,6 +517,84 @@ export default function App() {
               </div>
             )}
           </>
+        )}
+
+        {activeNav === 'query' && (
+          <QueryView
+            rows={filteredData}
+            columnMeta={columnMeta as any}
+            columnOrder={columnOrder}
+            columnVisibility={columnVisibility as any}
+            sorting={sorting}
+            setSorting={setSorting}
+            setColumnVisibility={setColumnVisibility as any}
+            setColumnOrder={setColumnOrder}
+            setData={histSetData as any}
+            setColumnMeta={setColumnMeta as any}
+            rowHeight={rowHeight}
+            freezeCount={freezeCount}
+            onFreezeTo={onFreezeTo}
+            colWidth={colWidth}
+            colWidths={colWidths}
+            setColWidths={setColWidths}
+            defaultSelectOptions={initialOptions}
+            getCellBg={getCellBg}
+            selectedCell={selectedCell}
+            editingCell={editingCell}
+            setSelectedCell={setSelectedCell}
+            setEditingCell={setEditingCell}
+            onEditField={onEditFieldFromHook}
+            onHideField={onHideField}
+            onDeleteField={onDeleteField}
+            onInsertLeft={onInsertLeft}
+            onInsertRight={onInsertRight}
+            onDuplicateField={onDuplicateField}
+            onFillColorColumn={onFillColorColumn}
+            onCreateField={onCreateField}
+          />
+        )}
+
+        {activeNav === 'kanban' && (
+          <KanbanView
+            rows={filteredData as any}
+            columnMeta={columnMeta as any}
+            setData={histSetData as any}
+            defaultSelectOptions={initialOptions}
+            groupFieldId={kanbanGroupFieldId ?? undefined}
+            onChangeGroupFieldId={(fid: string) => setKanbanGroupField(fid)}
+          />
+        )}
+
+        {activeNav === 'calendar' && (
+          <CalendarView
+            rows={filteredData as any}
+            columnMeta={columnMeta as any}
+            setData={histSetData as any}
+            startDateFieldId={calendarFields.startDateFieldId ?? undefined}
+            endDateFieldId={calendarFields.endDateFieldId ?? undefined}
+            onChangeDateFields={(sid: string | null, eid?: string | null) => setCalendarFields(sid, eid)}
+          />
+        )}
+
+        {activeNav === 'gantt' && (
+          <div style={{ padding: 24 }}>
+            <h3>甘特图视图</h3>
+            <p>任务时间线与依赖展示（占位）。</p>
+          </div>
+        )}
+
+        {activeNav === 'gallery' && (
+          <div style={{ padding: 24 }}>
+            <h3>画册视图</h3>
+            <p>图片或卡片瀑布流展示（占位）。</p>
+          </div>
+        )}
+
+        {activeNav === 'form' && (
+          <div style={{ padding: 24 }}>
+            <h3>表单视图</h3>
+            <p>表单设计与提交收集（占位）。</p>
+          </div>
         )}
 
         {activeNav === 'collect' && (

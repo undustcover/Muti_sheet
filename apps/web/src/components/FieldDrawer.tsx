@@ -21,10 +21,12 @@ const typeOptions: { value: FieldType; label: string }[] = [
   { value: 'text', label: '文本' },
   { value: 'number', label: '数字' },
   { value: 'date', label: '日期' },
-  { value: 'single', label: '选择' },
+  { value: 'singleSelect', label: '单选' },
+  { value: 'single', label: '选择（兼容）' },
   { value: 'multi', label: '多选' },
   { value: 'user', label: '用户' },
   { value: 'relation', label: '关联' },
+  { value: 'attachment', label: '附件' },
   { value: 'formula', label: '公式' },
 ];
 
@@ -256,7 +258,7 @@ export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initi
               <small style={{ color: '#666' }}>仅用于展示格式，不影响实际存储数值。</small>
             </div>
           )}
-          {(type === 'single' || type === 'multi') && (
+          {(type === 'single' || type === 'singleSelect' || type === 'multi') && (
             <div style={{ display: 'grid', rowGap: 8 }}>
               <div style={{ fontWeight: 600 }}>选项内容</div>
               <div style={{ display: 'flex', gap: 8 }}>

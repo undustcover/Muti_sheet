@@ -1,12 +1,13 @@
 import React from 'react';
 import Tabs from '../Tabs';
 import type { View } from '../../types';
+import type { ViewKind } from '../../services/viewsStore';
 
 export type HeaderTabsProps = {
   views: View[];
   activeViewId: string;
   onSelect: (id: string) => void;
-  onAdd: () => void;
+  onAddWithKind: (kind: ViewKind) => void;
   onRename: (id: string, name: string) => void;
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
@@ -17,7 +18,7 @@ const HeaderTabs: React.FC<HeaderTabsProps> = ({
   views,
   activeViewId,
   onSelect,
-  onAdd,
+  onAddWithKind,
   onRename,
   onDuplicate,
   onDelete,
@@ -28,7 +29,7 @@ const HeaderTabs: React.FC<HeaderTabsProps> = ({
       views={views}
       activeId={activeViewId}
       onSelect={onSelect}
-      onAdd={onAdd}
+      onAddWithKind={onAddWithKind}
       onRename={onRename}
       onDuplicate={onDuplicate}
       onDelete={onDelete}

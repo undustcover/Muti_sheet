@@ -14,6 +14,7 @@ export function useViews(params: {
 
   // view id
   activeViewId: string;
+  tableId: string;
 
   // view-scoped states
   sorting: any;
@@ -62,6 +63,7 @@ export function useViews(params: {
     setColorRules,
     show,
   } = params;
+  const { tableId } = params;
 
   // 过滤条件（支持条件组）
   const { activeGroup, setActiveGroup, filteredByGroup, applyGroup, clearGroup } = useFilterGroup({
@@ -70,7 +72,17 @@ export function useViews(params: {
   });
 
   // 视图级配置应用与持久化
-  const { viewConfigMap, updateStatsAgg } = useViewConfig({
+  const {
+    viewConfigMap,
+    updateStatsAgg,
+    viewKind,
+    setViewKind,
+    kanbanGroupFieldId,
+    setKanbanGroupField,
+    calendarFields,
+    setCalendarFields,
+  } = useViewConfig({
+    tableId,
     activeViewId,
     sorting,
     freezeCount,
@@ -137,6 +149,12 @@ export function useViews(params: {
     // view config map & helpers
     viewConfigMap,
     updateStatsAgg,
+    viewKind,
+    setViewKind,
+    kanbanGroupFieldId,
+    setKanbanGroupField,
+    calendarFields,
+    setCalendarFields,
 
     // query
     activeQuery,
