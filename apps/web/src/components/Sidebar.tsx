@@ -13,7 +13,7 @@ type Task = { id: string; name: string; tables: DataTable[] };
 type Project = { id: string; name: string; tasks: Task[] };
 
 const SectionTitle: React.FC<{ title: string; onAdd?: () => void; addDisabled?: boolean; addTooltip?: string }> = ({ title, onAdd, addDisabled, addTooltip }) => (
-  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, color: '#8a8a8a', padding: '8px 12px', textTransform: 'uppercase' }}>
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, color: 'var(--muted)', padding: '8px 12px', textTransform: 'uppercase' }}>
     <span>{title}</span>
     {onAdd && (
       <span
@@ -42,7 +42,7 @@ const Row: React.FC<{ label: React.ReactNode; active?: boolean; onClick?: () => 
       padding: 'var(--spacing) 12px',
       cursor: 'pointer',
       borderRadius: 'var(--radius)',
-      background: active ? '#e6f0ff' : 'transparent',
+      background: active ? 'var(--surface-accent)' : 'transparent',
       color: active ? 'var(--color-primary)' : '#202020',
       margin: '2px var(--spacing)',
       display: 'flex',

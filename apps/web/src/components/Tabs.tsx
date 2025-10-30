@@ -58,6 +58,14 @@ export const Tabs: React.FC<Props> = ({ views, activeId, onSelect, onAddWithKind
                 >···</span>
               )}
             </div>
+            {isActive && (
+              <div style={{
+                position: 'absolute', left: 8, right: 8, bottom: -2, height: 3,
+                background: `linear-gradient(90deg, var(--color-primary), var(--color-accent))`,
+                borderRadius: 2,
+                boxShadow: '0 2px 6px rgba(37,99,235,0.25)'
+              }} />
+            )}
             {menuFor === v.id && (
               <div
                 style={{

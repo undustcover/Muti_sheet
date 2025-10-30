@@ -38,7 +38,7 @@
 }
 
 .read-the-docs {
-  color: #888;
+  color: var(--muted);
 }
 
 /* ====== Sheet Grid Styles ====== */
@@ -62,35 +62,35 @@
 .sheet-cell {
   position: relative;
   padding: 6px 8px 6px 8px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid transparent;
   transition: background 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
 }
 
 .sheet-cell:hover {
-  background: #f9fafb; /* light hover background */
-  border-color: #e5e7eb; /* light hover border */
+  background: var(--hover);
+  border-color: var(--border);
 }
 
 .sheet-cell.is-selected {
-  outline: 1px solid #2563eb;
+  outline: 1px solid var(--color-primary);
   outline-offset: -1px;
 }
 
 .sheet-cell.is-range {
-  background: #eef2ff; /* selection range background */
-  border-color: #c7d2fe;
+  background: var(--surface-accent);
+  border-color: var(--ring);
 }
 
 .sheet-cell.frozen {
   position: sticky;
   z-index: 2;
-  background: #fff; /* ensure frozen columns stay white */
+  background: var(--surface); /* ensure frozen columns stay white */
 }
 
 .sheet-cell.frozen-shadow {
   box-shadow: 12px 0 16px -12px rgba(0,0,0,0.16);
-  border-right: 1px solid #e5e7eb;
+  border-right: 1px solid var(--border);
 }
 
 .sheet-cell.frozen-shadow::after {
