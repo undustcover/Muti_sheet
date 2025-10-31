@@ -283,6 +283,37 @@ export default function App() {
 
   const { getCellBg } = useColorRules({ rules, columnMeta: logicColumnMeta, columnColors });
 
+  // 主页/空间数据
+  const [recentTables, setRecentTables] = useState<Array<{ id: string; name: string; description?: string }>>([]);
+  const [spaceMy, setSpaceMy] = useState<Array<{ id: string; name: string; tables?: Array<{ id: string; name: string; description?: string }> }>>([]);
+  const [spacePublic, setSpacePublic] = useState<Array<{ id: string; name: string; tables?: Array<{ id: string; name: string; description?: string }> }>>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        if (activeNav === 'home') {
+          const { apiListRecentTables } = await import('./services/home');
+          const list = await apiListRecentTables();
+          if (!cancelled) setRecentTables(list.map(it => ({ id: it.id, name: it.name, description: it.description })));
+        } else if (activeNav === 'space-my') {
+          const { apiListMySpace } = await import('./services/space');
+          const projs = await apiListMySpace();
+          if (!cancelled) setSpaceMy(projs.map(p => ({ id: p.id, name: p.name, tables: p.tables || [] })));
+        } else if (activeNav === 'space-public') {
+          const { apiListPublicSpace } = await import('./services/space');
+          const projs = await apiListPublicSpace();
+          if (!cancelled) setSpacePublic(projs.map(p => ({ id: p.id, name: p.name, tables: p.tables || [] })));
+        }
+      } catch (err) {
+        console.error(err);
+        show('加载列表失败', 'warning');
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [activeNav]);
+
   const countGroupConds = (grp: any): number => {
     if (!grp || !Array.isArray(grp.conditions)) return 0;
     return grp.conditions.reduce((acc: number, it: any) => (
@@ -525,6 +556,62 @@ export default function App() {
           </div>
         )}
       >
+        {activeNav === 'home' && (
+          <div style={{ padding: 16 }}>
+            <h3>最近编辑的数据表</h3>
+            {recentTables.length === 0 && <div style={{ color: '#666' }}>暂无最近编辑数据表</div>}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+              {recentTables.map(tb => (
+                <div key={tb.id} style={{ border: '1px solid #eee', borderRadius: 8, padding: 12, background: '#fff', cursor: 'pointer' }}
+                  onClick={() => { setActiveTableId(tb.id); setActiveNav('table'); }}>
+                  <div style={{ fontWeight: 600 }}>{tb.name}</div>
+                  {tb.description && <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>{tb.description}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeNav === 'space-my' && (
+          <div style={{ padding: 16 }}>
+            <h3>我的空间</h3>
+            {spaceMy.length === 0 && <div style={{ color: '#666' }}>暂无项目</div>}
+            {spaceMy.map(p => (
+              <div key={p.id} style={{ marginBottom: 16 }}>
+                <div style={{ fontWeight: 700 }}>{p.name}</div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
+                  {(p.tables || []).map(tb => (
+                    <div key={tb.id} style={{ padding: '8px 10px', border: '1px solid #eee', borderRadius: 6, background: '#fff', cursor: 'pointer' }}
+                      onClick={() => { setActiveTableId(tb.id); setActiveNav('table'); }}>
+                      {tb.name}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {activeNav === 'space-public' && (
+          <div style={{ padding: 16 }}>
+            <h3>项目空间（匿名只读）</h3>
+            {spacePublic.length === 0 && <div style={{ color: '#666' }}>暂无公开项目</div>}
+            {spacePublic.map(p => (
+              <div key={p.id} style={{ marginBottom: 16 }}>
+                <div style={{ fontWeight: 700 }}>{p.name}</div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
+                  {(p.tables || []).map(tb => (
+                    <div key={tb.id} style={{ padding: '8px 10px', border: '1px solid #eee', borderRadius: 6, background: '#fff', cursor: 'pointer' }}
+                      onClick={() => { setActiveTableId(tb.id); setActiveNav('table'); }}>
+                      {tb.name}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {activeNav === 'table' && (
           <>
             

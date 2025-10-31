@@ -13,6 +13,14 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api/v1');
 
+  // 允许前端开发环境跨域访问
+  app.enableCors({
+    origin: true,
+    credentials: true,
+    methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+    allowedHeaders: ['Content-Type','Authorization','X-Requested-With']
+  });
+
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true })
   );

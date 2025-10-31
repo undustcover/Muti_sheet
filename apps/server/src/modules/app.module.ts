@@ -16,6 +16,8 @@ import { QueryModule } from './query/query.module';
 import { ExportModule } from './export/export.module';
 import { ImportModule } from './import/import.module';
 import { AttachmentsModule } from './attachments/attachments.module';
+import { HomeModule } from './home/home.module';
+import { SpaceModule } from './space/space.module';
 
 @Module({
   imports: [
@@ -33,6 +35,8 @@ import { AttachmentsModule } from './attachments/attachments.module';
     ExportModule,
     ImportModule,
     AttachmentsModule,
+    HomeModule,
+    SpaceModule,
   ],
   controllers: [HealthController, MetricsController, InternalController],
   providers: [],

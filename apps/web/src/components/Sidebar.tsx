@@ -381,7 +381,16 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate, onSelectTable, ex
   return (
     <div style={{ width: 260, minWidth: 260, maxWidth: 260, boxSizing: 'border-box', flex: '0 0 260px', borderRight: `1px solid ${colors.dividerSubtle}`, minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#f5f5f5' }}>
       <div style={{ padding: 12, fontWeight: 700 }}>川庆国际项目运营多维数据表格</div>
-  
+      {/* 主页与空间 */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, color: '#8a8a8a', padding: '8px 12px', textTransform: 'uppercase' }}>
+        <span>主页与空间</span>
+      </div>
+      <div>
+        <Row label={<span>最近编辑</span>} active={active === 'home'} onClick={() => onNavigate('home')} />
+        <Row label={<span>我的空间</span>} active={active === 'space-my'} onClick={() => onNavigate('space-my')} />
+        <Row label={<span>项目空间</span>} active={active === 'space-public'} onClick={() => onNavigate('space-public')} />
+      </div>
+
       {/* 项目层级 */}
       <SectionTitle title="项目" />
       <div>
