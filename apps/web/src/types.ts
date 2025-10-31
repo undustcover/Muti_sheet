@@ -1,5 +1,7 @@
 // 集中管理所有类型定义
 
+import type { ViewKind } from './services/viewsStore';
+
 // 基础类型
 export type User = { id: string; name: string };
 export type SelectOption = { id: string; label: string };
@@ -25,7 +27,7 @@ export type RowRecord = {
 export type ColumnItem = { id: string; name: string; type: string };
 
 // 视图类型
-export type View = { id: string; name: string; protect: 'public' | 'locked' | 'personal' };
+export type View = { id: string; name: string; protect: 'public' | 'locked' | 'personal'; kind?: ViewKind };
 
 // 字段类型
 // 扩展：新增 attachment 与 singleSelect（作为 single 的别名）

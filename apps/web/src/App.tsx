@@ -32,6 +32,7 @@ import { useOverlays } from './hooks/useOverlays';
 import { useViews } from './hooks/useViews';
 import { useTopbarActions } from './hooks/useTopbarActions';
 import { useToolbarActions } from './hooks/useToolbarActions';
+import { getView, upsertView, listViews, removeView } from './services/viewsStore';
 
 const initialOptions: SelectOption[] = [
   { id: 'opt-1', label: '需求' },
@@ -54,6 +55,32 @@ export default function App() {
     { id: 'view-2', name: 'View 2', protect: 'public' },
   ]);
   const [activeViewId, setActiveViewId] = useState<string>('view-1');
+
+  // 初始化：确保主数据表默认为表格视图
+  const ensuredMainKindRef = useRef(false);
+  useEffect(() => {
+    if (ensuredMainKindRef.current) return;
+    ensuredMainKindRef.current = true;
+    const mainView = views.find(v => v.id === 'view-1') ?? views[0];
+    if (!mainView) return;
+    const persisted = getView(activeTableId, mainView.id);
+    if (!persisted || persisted.kind !== 'table') {
+      upsertView(activeTableId, {
+        id: mainView.id,
+        tableId: activeTableId,
+        name: persisted?.name ?? mainView.name,
+        kind: 'table',
+        config: (persisted?.config ?? {}) as any,
+      });
+      setViews(prev => prev.map(v => (v.id === mainView.id ? { ...v, kind: 'table' } : v)));
+    }
+  }, []);
+
+// 每次切换表时，加载该表的视图；若没有则创建默认主数据表视图
+// 视图按表加载的初始化逻辑移动至 activeTableId 初始化之后
+  // 将 kind 合并到视图数组，避免在 Tabs 中频繁读取
+  // 直接使用本地 state 携带的 kind，避免渲染期访问存储
+  const viewsWithKind: View[] = useMemo(() => views, [views]);
 
   // 统一浮层控制
   const {
@@ -102,6 +129,28 @@ export default function App() {
   }, [columnVisibility, setColumnVisibility]);
   void activeTableId; // 保留以兼容未来逻辑
 
+  // 每次切换表时，加载该表的视图；若没有则创建默认主数据表视图
+  useEffect(() => {
+    if (!activeTableId) return;
+    const persisted = listViews(activeTableId);
+    if (!persisted || persisted.length === 0) {
+      const id = 'view-1';
+      const name = '主数据表';
+      upsertView(activeTableId, { id, tableId: activeTableId, name, kind: 'table', config: {} as any });
+      setViews([{ id, name, protect: 'public', kind: 'table' }]);
+      setActiveViewId(id);
+      setActiveNav('table');
+    } else {
+      setViews(persisted.map(v => ({ id: v.id, name: v.name, protect: v.protect ?? 'public', kind: v.kind })) as any);
+      const exist = persisted.some(v => v.id === activeViewId);
+      const nextActiveId = exist ? activeViewId : persisted[0].id;
+      setActiveViewId(nextActiveId);
+      const nextKind = persisted.find(v => v.id === nextActiveId)?.kind ?? 'table';
+      setActiveNav(nextKind);
+    }
+  }, [activeTableId]);
+
+  // viewsWithKind 已在上方定义为从本地 state 读取 kind
   const [columnColors, setColumnColors] = useState<Record<string, string>>({});
   const [selectedCell, setSelectedCell] = useState<{ rowId: string | null; columnId: string | null }>({ rowId: null, columnId: null });
   const [editingCell, setEditingCell] = useState<{ rowId: string | null; columnId: string | null }>({ rowId: null, columnId: null });
@@ -397,9 +446,14 @@ export default function App() {
         sidebar={<Sidebar active={activeNav} onNavigate={setActiveNav} onSelectTable={(id) => setActiveTableId(id)} externalNewTable={externalNewTable} />}
         header={(
           <TopBar
-            views={views}
+            views={viewsWithKind}
             activeViewId={activeViewId}
-            onSelect={(id) => setActiveViewId(id)}
+            tableId={activeTableId}
+            onSelect={(id) => {
+              setActiveViewId(id);
+              const nextKind = viewsWithKind.find(v => v.id === id)?.kind ?? 'table';
+              setActiveNav(nextKind);
+            }}
             onAddWithKind={(kind) => {
               const id = `view-${views.length + 1}`;
               const defaultName = (
@@ -411,22 +465,30 @@ export default function App() {
                 kind === 'gallery' ? `画册视图 ${views.length + 1}` :
                 kind === 'form' ? `表单视图 ${views.length + 1}` : `View ${views.length + 1}`
               );
-              setViews(prev => [...prev, { id, name: defaultName, protect: 'public' }]);
+              setViews(prev => [...prev, { id, name: defaultName, protect: 'public', kind }]);
+              upsertView(activeTableId, { id, tableId: activeTableId, name: defaultName, kind, config: {} as any });
               setActiveViewId(id);
-              setViewKind(kind);
-              // 切换到对应视图页面
               setActiveNav(kind);
             }}
-            onRename={(id, name) => setViews(prev => prev.map(v => (v.id === id ? { ...v, name } : v)))}
+            onRename={(id, name) => {
+              setViews(prev => prev.map(v => (v.id === id ? { ...v, name } : v)));
+              const persisted = getView(activeTableId, id);
+              upsertView(activeTableId, { id, tableId: activeTableId, name, kind: persisted?.kind ?? 'table', config: persisted?.config ?? ({} as any), protect: persisted?.protect });
+            }}
             onDuplicate={(id) => {
               const src = views.find(v => v.id === id);
               if (!src) return;
               const nid = `view-${Date.now()}`;
-              setViews(prev => [...prev, { id: nid, name: `${src.name} 副本`, protect: src.protect }]);
+              const persisted = getView(activeTableId, id);
+              const nextKind = (src as any).kind ?? persisted?.kind ?? 'table';
+              const nextConfig = persisted?.config ?? ({} as any);
+              setViews(prev => [...prev, { id: nid, name: `${src.name} 副本`, protect: src.protect, kind: nextKind }]);
+              upsertView(activeTableId, { id: nid, tableId: activeTableId, name: `${src.name} 副本`, kind: nextKind, config: nextConfig, protect: persisted?.protect });
               setActiveViewId(nid);
             }}
             onDelete={(id) => {
               setViews(prev => prev.filter(v => v.id !== id));
+              removeView(activeTableId, id);
               if (activeViewId === id) {
                 const remain = views.filter(v => v.id !== id);
                 if (remain.length > 0) setActiveViewId(remain[0].id);
@@ -626,105 +688,53 @@ export default function App() {
         )}
       </PageLayout>
 
-      {/* 保护视图抽屉 */}
-      <ProtectDrawer
-        open={protectOpen}
-        onClose={closeProtect}
-        mode={currentProtect}
-        onModeChange={(m) => setProtectMode(m)}
-      />
+      {/* 浮层：保护设置 */}
+      {protectOpen && (
+        <ProtectModal
+          views={views}
+          activeViewId={activeViewId}
+          onClose={closeProtect}
+          onRename={(id, name) => setViews(prev => prev.map(v => (v.id === id ? { ...v, name } : v)))}
+        />
+      )}
 
-      {/* 字段抽屉 */}
-      <FieldDrawer
-        open={fieldDrawerOpen}
-        fieldId={editingFieldId}
-        initialName={editingFieldId ? columnMeta[editingFieldId]?.name : ''}
-        initialType={editingFieldId ? (columnMeta[editingFieldId]?.type as any) : 'text'}
-        initialDescription={editingFieldId ? (columnMeta[editingFieldId]?.description ?? '') : ''}
-        initialOptions={editingFieldId ? (columnMeta[editingFieldId]?.options ?? []) : []}
-        initialFormula={editingFieldId ? (columnMeta[editingFieldId]?.formula) : undefined}
-        initialNumberFormat={editingFieldId ? (columnMeta[editingFieldId]?.format) : undefined}
-        availableFields={columnItems}
-        disabledTypeEdit={editingFieldId === 'id'}
-        limitTypesTo={(editingFieldId && isFirstVisibleField(editingFieldId, columnOrder, columnVisibility)) ? (['text','number','date','formula'] as any) : undefined}
-        onClose={closeFieldDrawer}
-        onSave={({ id, name, type, description, options, formula, format }) => {
-          const isFirstField = isFirstVisibleField(id, columnOrder, columnVisibility);
-          const allowedFirstTypes = new Set(['text','number','date','formula']);
-          const trimmed = (name || '').trim();
-          if (!trimmed) { show('字段名称不能为空', 'warning'); return; }
-          if (isFirstField && !allowedFirstTypes.has(type as any)) { show('首字段类型仅支持：文本、数字、日期、公式', 'warning'); return; }
-
-          const isNew = !(id in columnMeta);
-          const prevOptions = (columnMeta[id]?.options ?? []);
-          const nextOptions = (type === 'single' || type === 'multi') ? (options ?? prevOptions) : [];
-
-          if (isNew) {
-            const item: any = { name: trimmed, type, description };
-            if (type === 'single' || type === 'multi') item.options = options ?? [];
-            if (type === 'number') item.format = format ?? { decimals: 0, thousand: false };
-            if (type === 'formula') item.formula = formula;
-            fieldOps.addField(id, item);
-          } else {
-            if (columnMeta[id]?.name !== trimmed) {
-              fieldOps.renameField(id, trimmed);
-            }
-            fieldOps.changeType(id, type as any, { options, format, formula });
-          }
-
-          // 当选项被删减时，清理当前数据中引用了已删除选项的值
-          const removedIds = new Set(prevOptions.filter((o) => !nextOptions.some((n) => n.id === o.id)).map((o) => o.id));
-          if (removedIds.size > 0) {
-            const normalizeType = (t: string) => (t === 'single' ? 'select' : t === 'multi' ? 'multiSelect' : t);
-            const tnorm = normalizeType(type);
-            histSetData((prev) => prev.map((r) => {
-              const v: any = (r as any)[id];
-              if (tnorm === 'select') {
-                if (v && removedIds.has(v.id)) {
-                  return { ...r, [id]: null } as any;
-                }
-              } else if (tnorm === 'multiSelect') {
-                if (Array.isArray(v) && v.length > 0) {
-                  const nv = v.filter((opt: SelectOption) => !removedIds.has(opt.id));
-                  if (nv.length !== v.length) {
-                    return { ...r, [id]: nv } as any;
-                  }
-                }
-              }
-              return r;
-            }));
-            show('选项删减：已清理无效选择', 'info');
-          }
-          requestMeasure();
-        }}
-      />
-
-      {filterOpen && (
-        <ConditionBuilder
-          open={filterOpen}
+      {/* 抽屉：字段侧边编辑 */}
+      {fieldDrawerOpen && (
+        <FieldDrawer
+          open={fieldDrawerOpen}
+          onClose={closeFieldDrawer}
           columns={columnItems}
+          columnMeta={columnMeta as any}
+          onEditField={onEditFieldFromHook}
+          onCreateField={onCreateField}
+        />
+      )}
+
+      {/* 抽屉：过滤器 */}
+      {filterOpen && (
+        <FilterDrawer
+          open={filterOpen}
           onClose={closeFilter}
-          initialGroup={activeGroup}
-          onClear={() => { clearGroup(); closeFilter(); show('已清除筛选', 'info'); }}
-          onApply={(group) => {
-            const nextCount = applyGroup(group);
-            closeFilter();
-            show(`筛选已应用，共 ${nextCount} 行`, 'success');
-          }}
+          columns={columnItems}
+          activeGroup={activeGroup as any}
+          setActiveGroup={setActiveGroup as any}
+          applyGroup={applyGroup}
+          clearGroup={clearGroup}
         />
       )}
 
+      {/* 模态：颜色规则 */}
       {colorOpen && (
-        <ColorRulesDrawer
+        <ColorRulesModal
           open={colorOpen}
-          columns={columnItems.filter((c) => columnVisibility[c.id] !== false)}
           onClose={closeColor}
-          onApplyColumnColor={onFillColorColumn}
+          columns={columnItems}
+          columnColors={columnColors}
+          setColumnColors={setColumnColors}
+          rules={rules}
+          setRules={setColorRules}
         />
       )}
-
-      {/* 查询弹窗 */}
-      <QueryModal open={queryOpen} onClose={closeQuery} value={activeQuery} onApply={applyQuery} focusTick={queryFocusTick} />
     </>
   );
 }

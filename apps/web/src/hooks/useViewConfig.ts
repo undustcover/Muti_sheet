@@ -228,21 +228,21 @@ export function useViewConfig(params: {
     upsertView(tableId, view);
   };
 
-  const setViewKind = (kind: ViewKind) => {
-    setViewKindMap((prev) => ({ ...prev, [activeViewId]: kind }));
-    const persisted = getView(tableId, activeViewId);
+  const setViewKind = (id: string, kind: ViewKind) => {
+    setViewKindMap((prev) => ({ ...prev, [id]: kind }));
+    const persisted = getView(tableId, id);
     const view: ViewConfig = {
-      id: activeViewId,
+      id,
       tableId,
-      name: persisted?.name ?? activeViewId,
+      name: persisted?.name ?? id,
       kind,
-      config: persisted?.config ?? (viewConfigMap[activeViewId] as GridConfig),
+      config: persisted?.config ?? (viewConfigMap[id] as GridConfig),
     };
     upsertView(tableId, view);
   };
 
   const setKanbanGroupField = (fieldId: string) => {
-    setViewKind('kanban');
+    setViewKind(activeViewId, 'kanban');
     setKanbanGroupFieldId(fieldId);
     const persisted = getView(tableId, activeViewId);
     const view: ViewConfig = {
@@ -256,7 +256,7 @@ export function useViewConfig(params: {
   };
 
   const setCalendarFields = (startId: string | null, endId?: string | null) => {
-    setViewKind('calendar');
+    setViewKind(activeViewId, 'calendar');
     setCalendarFieldsState({ startDateFieldId: startId, endDateFieldId: endId ?? null });
     const persisted = getView(tableId, activeViewId);
     const view: ViewConfig = {

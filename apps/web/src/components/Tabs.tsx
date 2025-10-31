@@ -5,6 +5,7 @@ import type { ViewKind } from '../services/viewsStore';
 type Props = {
   views: View[];
   activeId: string;
+  tableId: string;
   onSelect: (id: string) => void;
   onAddWithKind: (kind: ViewKind) => void;
   onRename: (id: string, name: string) => void;
@@ -13,7 +14,33 @@ type Props = {
   onProtectClick: (id: string) => void;
 };
 
-export const Tabs: React.FC<Props> = ({ views, activeId, onSelect, onAddWithKind, onRename, onDuplicate, onDelete, onProtectClick }) => {
+const kindIcon = (kind?: ViewKind) => {
+  switch (kind) {
+    case 'table': return '📋';
+    case 'query': return '🔍';
+    case 'kanban': return '🗂️';
+    case 'calendar': return '📅';
+    case 'gantt': return '📈';
+    case 'gallery': return '🖼️';
+    case 'form': return '📝';
+    default: return '📋';
+  }
+};
+
+const kindLabel = (kind?: ViewKind) => {
+  switch (kind) {
+    case 'table': return '表格';
+    case 'query': return '查询';
+    case 'kanban': return '看板';
+    case 'calendar': return '日历';
+    case 'gantt': return '甘特';
+    case 'gallery': return '画册';
+    case 'form': return '表单';
+    default: return '表格';
+  }
+};
+
+export const Tabs: React.FC<Props> = ({ views, activeId, tableId, onSelect, onAddWithKind, onRename, onDuplicate, onDelete, onProtectClick }) => {
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [renameFor, setRenameFor] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -24,6 +51,7 @@ export const Tabs: React.FC<Props> = ({ views, activeId, onSelect, onAddWithKind
     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing)' }}>
       {views.slice(0, 10).map((v) => {
         const isActive = v.id === activeId;
+        const kind = v.kind as ViewKind | undefined;
         return (
           <div key={v.id} style={{ position: 'relative' }}>
             <div
@@ -37,6 +65,7 @@ export const Tabs: React.FC<Props> = ({ views, activeId, onSelect, onAddWithKind
                 display: 'flex', alignItems: 'center', gap: 'var(--spacing)'
               }}
             >
+              <span aria-hidden style={{ fontSize: 12, opacity: 0.9 }}>{kindIcon(kind)}</span>
               {renameFor === v.id ? (
                 <input
                   autoFocus

@@ -6,6 +6,7 @@ import type { ViewKind } from '../../services/viewsStore';
 export type HeaderTabsProps = {
   views: View[];
   activeViewId: string;
+  tableId: string;
   onSelect: (id: string) => void;
   onAddWithKind: (kind: ViewKind) => void;
   onRename: (id: string, name: string) => void;
@@ -17,6 +18,7 @@ export type HeaderTabsProps = {
 const HeaderTabs: React.FC<HeaderTabsProps> = ({
   views,
   activeViewId,
+  tableId,
   onSelect,
   onAddWithKind,
   onRename,
@@ -28,6 +30,7 @@ const HeaderTabs: React.FC<HeaderTabsProps> = ({
     <Tabs
       views={views}
       activeId={activeViewId}
+      tableId={tableId}
       onSelect={onSelect}
       onAddWithKind={onAddWithKind}
       onRename={onRename}
