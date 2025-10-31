@@ -44,7 +44,7 @@ export const HeaderMenu: React.FC<Props> = ({ columnId, index, disabled, disable
       setOpen(false);
       setColorOpen(false);
       closeTimerRef.current = null;
-    }, 150);
+    }, 400);
   };
 
   // 取消颜色菜单关闭定时器
@@ -61,38 +61,20 @@ export const HeaderMenu: React.FC<Props> = ({ columnId, index, disabled, disable
     colorCloseTimerRef.current = window.setTimeout(() => {
       setColorOpen(false);
       colorCloseTimerRef.current = null;
-    }, 150);
+    }, 400);
   };
 
-  // 检查菜单是否超出容器边界（优先以表格容器为准，其次视口）
   const checkMenuPosition = () => {
-    if (!rootRef.current) return;
-
-    requestAnimationFrame(() => {
-      const triggerEl = rootRef.current;
-      if (!triggerEl) return;
-
-      const rootRect = triggerEl.getBoundingClientRect();
-      const menuWidth = 220; // 与下方样式中的 minWidth 保持一致
-
-      // 找到表格可视容器（App.tsx 中 data-app-ready="1" 的父级具有 overflow: hidden）
-      const gridEl = triggerEl.closest('[data-app-ready="1"]') as HTMLElement | null;
-      const containerEl = gridEl?.parentElement ?? null;
-
-      const containerRect = containerEl?.getBoundingClientRect() ?? null;
-      const rightBound = containerRect ? containerRect.right : window.innerWidth;
-      const leftBound = containerRect ? containerRect.left : 0;
-
-      const spaceRight = rightBound - rootRect.left; // 触发点右侧到容器右边界的空间
-      const spaceLeft = rootRect.right - leftBound;  // 触发点左侧到容器左边界的空间
-
-      // 如果右侧空间不足而左侧足够，则向左展开；否则向右展开
-      if (spaceRight < menuWidth && spaceLeft >= menuWidth) {
-        setMenuPosition('left');
-      } else {
-        setMenuPosition('right');
-      }
-    });
+    const root = rootRef.current;
+    const menu = menuRef.current;
+    if (!root || !menu) return;
+    const container = root.closest('[data-app-ready="1"]') as HTMLElement | null;
+    const containerRect = container?.getBoundingClientRect();
+    const rootRect = root.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+    if (!containerRect) return;
+    const willOverflowRight = (rootRect.left + menuRect.width) > containerRect.right;
+    setMenuPosition(willOverflowRight ? 'left' : 'right');
   };
 
   // 当菜单打开时，检查位置并添加鼠标事件监听
@@ -145,6 +127,8 @@ export const HeaderMenu: React.FC<Props> = ({ columnId, index, disabled, disable
         >
           <div style={{ padding: 'var(--spacing)', cursor: 'pointer' }} onClick={() => { onEditField?.(columnId); setOpen(false); }}>编辑字段</div>
           <div style={{ padding: 'var(--spacing)', cursor: 'pointer' }} onClick={() => { onEditField?.(columnId); setOpen(false); }}>编辑描述</div>
+          {/* 新增：隐藏字段 */}
+          <div style={{ padding: 'var(--spacing)', cursor: disableHide ? 'not-allowed' : 'pointer', color: disableHide ? 'var(--muted)' : undefined }} onClick={() => { if (!disableHide) { onHideField?.(columnId); setOpen(false); } }}>隐藏字段</div>
           <div 
             style={{ 
               padding: 'var(--spacing)', 
@@ -177,27 +161,15 @@ export const HeaderMenu: React.FC<Props> = ({ columnId, index, disabled, disable
                 {colors.map((c) => (
                   <span 
                     key={c} 
-                    title={c} 
-                    onClick={() => { onFillColorColumn?.(columnId, c); setColorOpen(false); setOpen(false); }} 
-                    style={{ 
-                      width: 18, 
-                      height: 18, 
-                      borderRadius: 4, 
-                      background: c, 
-                      border: '1px solid var(--border)', 
-                      cursor: 'pointer' 
-                    }} 
+                    role="button" 
+                    title={c}
+                    style={{ width: 18, height: 18, background: c, borderRadius: 4, border: '1px solid #ddd', cursor: 'pointer' }}
+                    onClick={() => { onFillColorColumn?.(columnId, c); setOpen(false); }}
                   />
                 ))}
               </div>
             )}
           </div>
-          <div style={{ borderTop: '1px solid var(--border)' }} />
-          <div style={{ padding: 'var(--spacing)', cursor: 'pointer' }} onClick={() => { onFreezeTo?.(index + 1); setOpen(false); }}>冻结至此字段</div>
-          <div style={{ padding: 'var(--spacing)', cursor: disableHide ? 'not-allowed' : 'pointer', color: disableHide ? 'var(--muted)' : undefined }} onClick={() => { if (!disableHide) { onHideField?.(columnId); setOpen(false); } }}>隐藏字段</div>
-          <div style={{ borderTop: '1px solid var(--border)' }} />
-          <div style={{ padding: 'var(--spacing)', cursor: 'pointer' }} onClick={() => { onInsertLeft?.(columnId); setOpen(false); }}>插入左侧</div>
-          <div style={{ padding: 'var(--spacing)', cursor: 'pointer' }} onClick={() => { onInsertRight?.(columnId); setOpen(false); }}>插入右侧</div>
           <div style={{ padding: 'var(--spacing)', cursor: 'pointer' }} onClick={() => { onDuplicateField?.(columnId); setOpen(false); }}>复制字段</div>
           <div style={{ borderTop: '1px solid var(--border)' }} />
           <div style={{ padding: 'var(--spacing)', cursor: 'pointer' }} onClick={() => { onSortAsc?.(columnId); setOpen(false); }}>升序</div>

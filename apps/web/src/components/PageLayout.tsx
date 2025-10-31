@@ -17,7 +17,7 @@ export default function PageLayout({ sidebar, header, toolbar, children }: PageL
           {header}
         </div>
         {toolbar && (
-          <div style={{ padding: '8px 12px', borderBottom: `1px solid ${colors.dividerSubtle}`, background: colors.toolbarGlassBg, backdropFilter: effects.toolbarBackdrop }}>
+          <div style={{ padding: '8px 12px', borderBottom: `1px solid ${colors.dividerSubtle}`, background: colors.toolbarGlassBg, backdropFilter: effects.toolbarBackdrop, position: 'relative', zIndex: 100 }}>
             {toolbar}
           </div>
         )}

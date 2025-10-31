@@ -218,22 +218,16 @@ export const Toolbar: React.FC<Props> = ({ columns, onColumnsChange, rowHeight, 
                   const data = evt.target?.result;
                   if (!data) return;
                   import('xlsx').then((XLSX) => {
-                    const wb = XLSX.read(data as ArrayBuffer, { type: 'array' });
+                    const wb = XLSX.read(data, { type: 'binary' });
                     const sheetName = wb.SheetNames[0];
-                    const ws = wb.Sheets[sheetName];
-                    const json = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+                    const sheet = wb.Sheets[sheetName];
+                    const json = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[];
                     const header = (json[0] ?? []) as any[];
-                    const rows = json.slice(1) as any[][];
-                    const fileName = (file.name || '导入表').replace(/\.(xlsx|xls)$/i, '');
-                    const confirmed = window.confirm(
-                      `确认导入 Excel?\n\n文件: ${fileName}\n工作表: ${sheetName}\n列数: ${header.length}\n行数: ${rows.length}`
-                    );
-                    if (!confirmed) { e.target.value = ''; return; }
-                    onImport?.({ fileName, sheetName, header, rows });
+                    const rows = (json.slice(1) ?? []) as any[][];
+                    onImport?.({ fileName: file.name, sheetName, header, rows });
                   });
                 };
-                reader.readAsArrayBuffer(file);
-                e.target.value = '';
+                reader.readAsBinaryString(file);
               }}
             />
           </>
@@ -244,14 +238,14 @@ export const Toolbar: React.FC<Props> = ({ columns, onColumnsChange, rowHeight, 
           </span>
         )}
         {onShowAllHidden && (
-          <span role="button" title="显示隐藏字段" onClick={() => onShowAllHidden()} style={{ cursor: 'pointer' }}>
+          <button aria-label="显示隐藏字段" title="显示隐藏字段" onClick={() => onShowAllHidden()} style={{ cursor: 'pointer', background: 'none', border: 'none', padding: 0 }}>
             <IconEye color={iconColor} />
-          </span>
+          </button>
         )}
-        <span title="分享" style={{ display: 'inline-flex', alignItems: 'center' }}>
+        <span role="button" title="复制链接" style={{ cursor: 'pointer' }}>
           <IconLink color={iconColor} />
         </span>
-        <span title="评论" style={{ display: 'inline-flex', alignItems: 'center' }}>
+        <span role="button" title="评论" style={{ cursor: 'pointer' }}>
           <IconComment color={iconColor} />
         </span>
       </div>

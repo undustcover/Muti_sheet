@@ -99,6 +99,8 @@ export default function App() {
     closeColor,
   } = useOverlays({ setActiveViewId });
 
+  const overlaysOpen = protectOpen || fieldDrawerOpen || filterOpen || colorOpen;
+
   // 表格与列状态
   const [rowHeight, setRowHeight] = useState<'low' | 'medium' | 'high' | 'xhigh'>('medium');
   const [freezeCount, setFreezeCount] = useState<number>(1);
@@ -498,27 +500,29 @@ export default function App() {
           />
         )}
         toolbar={(
-          <MainToolbar
-            columns={columnItems}
-            onColumnsChange={onColumnsChange}
-            rowHeight={rowHeight}
-            onRowHeightChange={(h) => setRowHeight(h)}
-            onFilterOpen={openFilter}
-            onColorOpen={openColor}
-            onShowAllHidden={showAllHidden}
-            onAddRecord={onAddRecord}
-            onImport={onImport}
-            onExport={onExport}
-            columnVisibility={columnVisibility as any}
-            onToggleFieldVisibility={onToggleFieldVisibility}
-            onUndo={undo}
-            onRedo={redo}
-            onQuery={openQuery}
-            onDelete={() => show('删除记录暂未实现', 'info')}
-            onSortOpen={onSortOpen}
-            onCreateField={onCreateField}
-            onEditField={onEditFieldFromHook}
-          />
+          <div aria-hidden={overlaysOpen}>
+            <MainToolbar
+              columns={columnItems}
+              onColumnsChange={onColumnsChange}
+              rowHeight={rowHeight}
+              onRowHeightChange={(h) => { setRowHeight(h); requestMeasure(); }}
+              onFilterOpen={openFilter}
+              onColorOpen={openColor}
+              onShowAllHidden={showAllHidden}
+              onAddRecord={onAddRecord}
+              onImport={onImport}
+              onExport={onExport}
+              columnVisibility={columnVisibility as any}
+              onToggleFieldVisibility={onToggleFieldVisibility}
+              onUndo={undo}
+              onRedo={redo}
+              onQuery={openQuery}
+              onDelete={() => show('删除记录暂未实现', 'info')}
+              onSortOpen={onSortOpen}
+              onCreateField={onCreateField}
+              onEditField={onEditFieldFromHook}
+            />
+          </div>
         )}
       >
         {activeNav === 'table' && (
@@ -690,11 +694,11 @@ export default function App() {
 
       {/* 浮层：保护设置 */}
       {protectOpen && (
-        <ProtectModal
-          views={views}
-          activeViewId={activeViewId}
+        <ProtectDrawer
+          open={protectOpen}
           onClose={closeProtect}
-          onRename={(id, name) => setViews(prev => prev.map(v => (v.id === id ? { ...v, name } : v)))}
+          mode={(views.find(v => v.id === activeViewId)?.protect ?? 'public') as 'public' | 'locked' | 'personal'}
+          onModeChange={(m) => setViews(prev => prev.map(v => (v.id === activeViewId ? { ...v, protect: m } : v)))}
         />
       )}
 
@@ -702,37 +706,57 @@ export default function App() {
       {fieldDrawerOpen && (
         <FieldDrawer
           open={fieldDrawerOpen}
+          fieldId={editingFieldId}
+          availableFields={Object.entries(columnMeta).map(([id, meta]) => ({ id, name: meta.name, type: meta.type }))}
           onClose={closeFieldDrawer}
-          columns={columnItems}
-          columnMeta={columnMeta as any}
-          onEditField={onEditFieldFromHook}
-          onCreateField={onCreateField}
+          onSave={(payload) => {
+            const { id, name, type, description, options, formula, format } = payload;
+            const exists = !!columnMeta[id];
+            if (exists) {
+              if (columnMeta[id].name !== name) {
+                fieldOps.renameField(id, name);
+              }
+              fieldOps.changeType(id, type as any, { options, formula, format });
+              if (description !== undefined) {
+                histSetColumnMeta(prev => ({ ...prev, [id]: { ...prev[id], description } }));
+              }
+            } else {
+              fieldOps.addField(id, { id, name, type });
+              if (description !== undefined) {
+                histSetColumnMeta(prev => ({ ...prev, [id]: { ...prev[id], description } }));
+              }
+              if (type === 'single' || type === 'multi' || type === 'number' || type === 'formula') {
+                fieldOps.changeType(id, type as any, { options, formula, format });
+              }
+            }
+            closeFieldDrawer();
+          }}
         />
       )}
 
       {/* 抽屉：过滤器 */}
       {filterOpen && (
-        <FilterDrawer
+        <ConditionBuilder
           open={filterOpen}
-          onClose={closeFilter}
           columns={columnItems}
-          activeGroup={activeGroup as any}
-          setActiveGroup={setActiveGroup as any}
-          applyGroup={applyGroup}
-          clearGroup={clearGroup}
+          onClose={closeFilter}
+          initialGroup={activeGroup as any}
+          onClear={() => { clearGroup(); closeFilter(); show('已清除筛选', 'info'); }}
+          onApply={(group) => {
+            const nextCount = applyGroup(group);
+            closeFilter();
+            show(`筛选已应用，共 ${nextCount} 行`, 'success');
+          }}
         />
       )}
 
       {/* 模态：颜色规则 */}
       {colorOpen && (
-        <ColorRulesModal
+        <ColorRulesDrawer
           open={colorOpen}
           onClose={closeColor}
           columns={columnItems}
-          columnColors={columnColors}
-          setColumnColors={setColumnColors}
-          rules={rules}
-          setRules={setColorRules}
+          onApplyColumnColor={(cid, color) => setColumnColors((prev) => ({ ...prev, [cid]: color }))}
         />
       )}
     </>
