@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { IconPlus, IconTask, IconTable, IconMore, IconChevronDown, IconChevronRight, IconCollect, IconDashboard, IconFolder } from './Icons';
+import { colors } from '../design/tokens';
 
 type Props = {
   active: string;
@@ -378,7 +379,7 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate, onSelectTable, ex
 
   // 在 Sidebar 组件内部已有状态与函数后，渲染最底部增加 Modal UI（依赖 compose* 状态）
   return (
-    <div style={{ width: 260, minWidth: 260, maxWidth: 260, boxSizing: 'border-box', flex: '0 0 260px', borderRight: '1px solid #eee', height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ width: 260, minWidth: 260, maxWidth: 260, boxSizing: 'border-box', flex: '0 0 260px', borderRight: `1px solid ${colors.dividerSubtle}`, minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#f5f5f5' }}>
       <div style={{ padding: 12, fontWeight: 700 }}>多维表格</div>
   
       {/* 项目层级 */}

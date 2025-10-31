@@ -1,4 +1,5 @@
 import React from 'react';
+import { colors, effects } from '../design/tokens';
 
 interface PageLayoutProps {
   sidebar: React.ReactNode;
@@ -12,11 +13,11 @@ export default function PageLayout({ sidebar, header, toolbar, children }: PageL
     <div style={{ display: 'flex' }}>
       {sidebar}
       <div style={{ flex: 1, minWidth: 0, height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: 12, borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ padding: 12, borderBottom: `1px solid ${colors.dividerSubtle}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: `linear-gradient(180deg, ${colors.topbarGradientDeepStart} 0%, ${colors.topbarGradientDeepEnd} 100%)` }}>
           {header}
         </div>
         {toolbar && (
-          <div style={{ padding: '8px 12px', borderBottom: '1px solid #f0f0f0' }}>
+          <div style={{ padding: '8px 12px', borderBottom: `1px solid ${colors.dividerSubtle}`, background: colors.toolbarGlassBg, backdropFilter: effects.toolbarBackdrop }}>
             {toolbar}
           </div>
         )}

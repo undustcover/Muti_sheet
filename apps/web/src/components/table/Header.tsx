@@ -72,7 +72,7 @@ export default function Header({
     <div style={{
       position: 'sticky',
       top: 0,
-      background: '#fff',
+      background: '#f5f9ff',
       display: 'grid',
       gridTemplateColumns: templateColumns,
       gap: 0,

@@ -284,7 +284,7 @@ const [indexColWidth] = useState<number>(26);
 
   
   return (
-    <div data-app-ready="1">
+    <div data-app-ready="1" style={{ background: '#f5f9ff' }}>
       <GridStateProvider value={{ selectedCell, editingCell, setSelectedCell, setEditingCell, selectionRange, setSelectionRange, isDragging, setIsDragging, isInRange, headerSelectedCid, setHeaderSelectedCid, focusGrid: () => parentRef.current?.focus() }}>
         <GridSurface
           parentRef={parentRef}

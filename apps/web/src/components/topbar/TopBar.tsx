@@ -10,7 +10,7 @@ export type TopBarProps = HeaderTabsProps & {
 const TopBar: React.FC<TopBarProps> = ({ breadcrumb, renderBreadcrumbs, ...tabsProps }) => {
   const crumbs = breadcrumb ?? renderBreadcrumbs?.();
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing)', background: 'var(--surface-subtle)', borderBottom: '1px solid var(--divider)', padding: '8px 12px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing)', background: 'transparent', borderBottom: 'none', padding: '8px 12px' }}>
       {crumbs ? (
         <div data-breadcrumb-container>
           {crumbs}
