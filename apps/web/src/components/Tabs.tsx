@@ -98,7 +98,7 @@ export const Tabs: React.FC<Props> = ({ views, activeId, tableId, onSelect, onAd
             {menuFor === v.id && (
               <div
                 style={{
-                  position: 'absolute', top: '110%', left: 0, zIndex: 20,
+                  position: 'absolute', top: '110%', left: 0, zIndex: 60,
                   background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', boxShadow: 'var(--shadow)'
                 }}
               >

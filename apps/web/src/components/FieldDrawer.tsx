@@ -45,6 +45,28 @@ export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initi
   const [numThousand, setNumThousand] = useState<boolean>(initialNumberFormat?.thousand ?? false);
   const [batchOpen, setBatchOpen] = useState<boolean>(false);
 
+  // 统一的输入控件样式（更柔和、更现代）
+  const inputStyle: React.CSSProperties = {
+    border: '1px solid var(--border)',
+    borderRadius: '10px',
+    padding: '8px 10px',
+    background: 'rgba(255,255,255,0.9)',
+    boxShadow: 'inset 0 1px 2px rgba(16,24,40,0.06)',
+  };
+  const selectStyle: React.CSSProperties = {
+    border: '1px solid var(--border)',
+    borderRadius: '10px',
+    padding: '8px 10px',
+    background: 'rgba(255,255,255,0.9)',
+    boxShadow: 'inset 0 1px 2px rgba(16,24,40,0.06)',
+  };
+  const textareaStyle: React.CSSProperties = {
+    border: '1px solid var(--border)',
+    borderRadius: '12px',
+    padding: '8px 10px',
+    background: 'rgba(255,255,255,0.9)',
+    boxShadow: 'inset 0 1px 2px rgba(16,24,40,0.06)',
+  };
   useEffect(() => {
     setName(initialName ?? '');
     setType(initialType ?? 'text');
@@ -71,21 +93,21 @@ export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initi
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 1000, pointerEvents: 'none' }}>
       {/* backdrop */}
-      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.15)', pointerEvents: 'auto' }} />
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(17,24,39,0.28)', backdropFilter: 'blur(2px)', pointerEvents: 'auto' }} />
       {/* panel */}
-      <div style={{ position: 'absolute', right: 0, top: 0, height: '100%', width: 360, background: '#fff', boxShadow: '0 8px 30px rgba(0,0,0,0.12)', borderLeft: '1px solid #eee', pointerEvents: 'auto', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: 16, borderBottom: '1px solid #f2f2f2' }}>
-          <div style={{ fontSize: 16, fontWeight: 600 }}>编辑字段</div>
-          <div style={{ marginTop: 8, color: '#888' }}>字段ID：{fieldId}</div>
+      <div style={{ position: 'absolute', right: 0, top: 0, height: '100%', width: 420, background: 'rgba(255,255,255,0.85)', backdropFilter: 'saturate(160%) blur(8px)', boxShadow: 'var(--shadow)', borderLeft: '1px solid var(--divider)', pointerEvents: 'auto', display: 'flex', flexDirection: 'column', borderTopLeftRadius: 'var(--radius)', borderBottomLeftRadius: 'var(--radius)' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--divider)', background: 'var(--surface-subtle)' }}>
+          <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--color-primary)' }}>编辑字段</div>
+          <div style={{ marginTop: 6, color: 'var(--muted)', fontSize: 12 }}>字段ID：{fieldId}</div>
         </div>
-        <div style={{ padding: 16, display: 'grid', rowGap: 12 }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 20px', display: 'grid', rowGap: 12 }}>
           <label style={{ display: 'grid', rowGap: 6 }}>
             <span>字段名称</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：任务名称" />
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：任务名称" style={inputStyle} />
           </label>
           <label style={{ display: 'grid', rowGap: 6 }}>
             <span>字段类型</span>
-            <select disabled={!!disabledTypeEdit} value={type} onChange={(e) => setType(e.target.value as FieldType)}>
+            <select disabled={!!disabledTypeEdit} value={type} onChange={(e) => setType(e.target.value as FieldType)} style={selectStyle}>
               {filteredTypeOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
@@ -94,12 +116,12 @@ export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initi
           </label>
           <label style={{ display: 'grid', rowGap: 6 }}>
             <span>字段描述</span>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder="用于解释该字段用途或输入规范" />
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder="用于解释该字段用途或输入规范" style={textareaStyle} />
           </label>
+
           {type === 'formula' && (
             <div style={{ display: 'grid', rowGap: 8 }}>
               <div style={{ fontWeight: 600 }}>公式配置</div>
-              {/* 仅数字字段可选 */}
               {availableFields.filter((f) => f.type === 'number').length === 0 && (
                 <div style={{ color: '#b91c1c', background: '#fee2e2', padding: 8, borderRadius: 6 }}>
                   无数字字段，无法配置公式。请先添加或将参与列类型改为“数字”。
@@ -112,12 +134,10 @@ export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initi
                   setFormulaOp(next);
                   const numericIds = availableFields.filter((f) => f.type === 'number').map((f) => f.id);
                   setFormulaFields((prev) => {
-                    // 二元操作限制2个，其他可多选
                     const binary = ['add','sub','mul','div'].includes(next);
                     const cleaned = prev.filter((id) => numericIds.includes(id));
                     if (binary) {
                       const base = cleaned.slice(0, 2);
-                      // 不足时自动补齐
                       while (base.length < 2 && numericIds[base.length]) base.push(numericIds[base.length]);
                       return base;
                     }
@@ -134,7 +154,6 @@ export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initi
                   <option value="div">相除（两个字段）</option>
                 </select>
               </label>
-              {/* 批量选择 */}
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <button onClick={() => setBatchOpen((o) => !o)}>{batchOpen ? '关闭批量选择' : '批量选择字段'}</button>
                 <small style={{ color: '#666' }}>仅显示数字类型字段</small>
@@ -173,7 +192,6 @@ export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initi
                   )}
                 </div>
               )}
-              {/* 单条选择列表（便于调序和限制） */}
               <div style={{ display: 'grid', rowGap: 6 }}>
                 <span>参与字段</span>
                 {(
@@ -205,7 +223,6 @@ export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initi
                   <small style={{ color: '#b45309', background: '#fffbeb', padding: '4px 6px', borderRadius: 6 }}>二元操作需要配置两个数字字段</small>
                 )}
               </div>
-              {/* 表达式可视化与格式化 */}
               <div style={{ display: 'grid', rowGap: 6 }}>
                 <span>表达式预览</span>
                 <div style={{ padding: 8, border: '1px dashed #ddd', borderRadius: 6, color: '#444' }}>
@@ -231,7 +248,7 @@ export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initi
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                     <span>小数位</span>
-                    <input type="number" min={0} max={6} value={decimals} onChange={(e) => setDecimals(Math.max(0, Math.min(6, Number(e.target.value) || 0)))} style={{ width: 80 }} />
+                    <input type="number" min={0} max={6} value={decimals} onChange={(e) => setDecimals(Math.max(0, Math.min(6, Number(e.target.value) || 0)))} style={{ ...inputStyle, width: 80 }} />
                   </label>
                   <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                     <input type="checkbox" checked={thousand} onChange={(e) => setThousand(e.target.checked)} />
@@ -242,13 +259,14 @@ export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initi
               </div>
             </div>
           )}
+
           {type === 'number' && (
             <div style={{ display: 'grid', rowGap: 8 }}>
               <div style={{ fontWeight: 600 }}>数值格式</div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   <span>小数位</span>
-                  <input type="number" min={0} max={6} value={numDecimals} onChange={(e) => setNumDecimals(Math.max(0, Math.min(6, Number(e.target.value) || 0)))} style={{ width: 80 }} />
+                  <input type="number" min={0} max={6} value={numDecimals} onChange={(e) => setNumDecimals(Math.max(0, Math.min(6, Number(e.target.value) || 0)))} style={{ ...inputStyle, width: 80 }} />
                 </label>
                 <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   <input type="checkbox" checked={numThousand} onChange={(e) => setNumThousand(e.target.checked)} />
@@ -258,6 +276,7 @@ export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initi
               <small style={{ color: '#666' }}>仅用于展示格式，不影响实际存储数值。</small>
             </div>
           )}
+
           {(type === 'single' || type === 'singleSelect' || type === 'multi') && (
             <div style={{ display: 'grid', rowGap: 8 }}>
               <div style={{ fontWeight: 600 }}>选项内容</div>
@@ -274,21 +293,20 @@ export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initi
                       setNewOptionLabel('');
                     }
                   }}
+                  style={inputStyle}
                 />
-                <button
-                  onClick={() => {
-                    const label = newOptionLabel.trim();
-                    if (!label) return;
-                    setOptions((prev) => [...prev, { id: `opt-${Date.now()}-${prev.length + 1}`, label }]);
-                    setNewOptionLabel('');
-                  }}
-                >添加</button>
+                <button onClick={() => {
+                  const label = newOptionLabel.trim();
+                  if (!label) return;
+                  setOptions((prev) => [...prev, { id: `opt-${Date.now()}-${prev.length + 1}`, label }]);
+                  setNewOptionLabel('');
+                }}>添加</button>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, border: '1px solid var(--divider)', borderRadius: '12px', padding: 8, background: 'var(--surface-subtle)' }}>
                 {options.map((opt, idx) => (
                   <div key={opt.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <span style={{ color: '#999' }}>#{idx + 1}</span>
-                    <input value={opt.label} onChange={(e) => setOptions((prev) => prev.map((o) => o.id === opt.id ? { ...o, label: e.target.value } : o))} />
+                    <input value={opt.label} onChange={(e) => setOptions((prev) => prev.map((o) => o.id === opt.id ? { ...o, label: e.target.value } : o))} style={inputStyle} />
                     <button onClick={() => setOptions((prev) => prev.filter((o) => o.id !== opt.id))}>删除</button>
                   </div>
                 ))}
@@ -297,27 +315,27 @@ export const FieldDrawer: React.FC<Props> = ({ open, fieldId, initialName, initi
             </div>
           )}
         </div>
-        <div style={{ marginTop: 'auto', padding: 16, borderTop: '1px solid #f2f2f2', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button onClick={onClose}>取消</button>
+        <div style={{ marginTop: 'auto', padding: '12px 16px', borderTop: '1px solid var(--divider)', display: 'flex', gap: 'var(--spacing)', justifyContent: 'flex-end', background: 'var(--surface-subtle)' }}>
+          <button onClick={onClose} style={{ padding: '6px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: '#fff' }}>取消</button>
           <button
-            style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 6 }}
-          onClick={() => {
-            if (!fieldId) return;
-            const payload: any = { id: fieldId, name: name.trim() || initialName || '', type, description: description.trim() };
-            if (type === 'single' || type === 'multi') {
-              payload.options = options;
-            }
-            if (type === 'formula') {
-              const binary = ['add','sub','mul','div'].includes(formulaOp);
-              const flds = binary ? formulaFields.slice(0, 2).filter(Boolean) : formulaFields.filter(Boolean);
-              payload.formula = { op: formulaOp, fields: flds, format: { decimals, thousand } };
-            }
-            if (type === 'number') {
-              payload.format = { decimals: numDecimals, thousand: numThousand };
-            }
-            onSave(payload);
-            onClose();
-          }}
+            style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 'var(--radius)', boxShadow: 'var(--shadow-soft)' }}
+            onClick={() => {
+              if (!fieldId) return;
+              const payload: any = { id: fieldId, name: name.trim() || initialName || '', type, description: description.trim() };
+              if (type === 'single' || type === 'multi') {
+                payload.options = options;
+              }
+              if (type === 'formula') {
+                const binary = ['add','sub','mul','div'].includes(formulaOp);
+                const flds = binary ? formulaFields.slice(0, 2).filter(Boolean) : formulaFields.filter(Boolean);
+                payload.formula = { op: formulaOp, fields: flds, format: { decimals, thousand } };
+              }
+              if (type === 'number') {
+                payload.format = { decimals: numDecimals, thousand: numThousand };
+              }
+              onSave(payload);
+              onClose();
+            }}
           >保存</button>
         </div>
       </div>
