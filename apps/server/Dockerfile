@@ -13,10 +13,12 @@ FROM node:20 AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 RUN useradd -m -r -s /bin/bash appuser
-USER appuser
 COPY --from=builder /app/package.json /app/package.json
 COPY --from=builder /app/node_modules /app/node_modules
 COPY --from=builder /app/dist /app/dist
 COPY --from=builder /app/prisma /app/prisma
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh && chown -R appuser:appuser /app
+USER appuser
 EXPOSE 3000
-CMD ["node", "dist/main.js"]
+CMD ["/app/start.sh"]
