@@ -269,3 +269,42 @@
  - 2025-10-31 13:25 | 系统 | 整合节点与索引迁移 | ~ | 合并“数据建模与索引”到“二、数据模型与迁移”，新增索引迁移 SQL（JSONB GIN 与 ICU 拼音表达式索引），等待应用到数据库
  - 2025-10-31 14:08 | 系统 | 数据模型与迁移 | x | 更新数据库连接密码；执行 `prisma db push` 创建结构；执行 ICU 拼音 Collation 与 JSONB GIN/拼音表达式索引 SQL；节点完成
  - 2025-10-31 13:58 | 系统 | 数据模型与迁移 | ~ | 写入 apps/server/.env；安装工作区依赖；修复 Prisma 关系错误并生成客户端；Docker 未运行导致 compose 启动失败，迁移与索引待数据库可用后执行
+## 删除顺序与外键约束（重要）
+
+为避免 Prisma 在删除时触发外键约束错误（例如 `P2003: Foreign key constraint violated: RecordsData_fieldId_fkey`），必须遵循严格的删除顺序。以下为当前数据模型的关键依赖关系与推荐顺序：
+
+- 关键外键依赖
+  - `RecordsData.recordId -> Record.id`
+  - `RecordsData.fieldId -> Field.id`
+  - `Attachment.recordId -> Record.id`
+  - `Attachment.tableId -> Table.id`
+  - `View.tableId -> Table.id`
+  - `ViewShare.viewId -> View.id`
+
+- 删除表（Table）推荐事务顺序
+  1) 删除视图共享（`ViewShare`）
+  2) 删除视图（`View`）
+  3) 删除记录相关数据：
+     - `RecordsData`（按 `recordId` 批量删除）
+     - 记录附件 `Attachment`（按 `recordId` 批量删除）
+     - 记录实体 `Record`
+  4) 删除字段（`Field`）
+  5) 删除表级附件（`Attachment`，按 `tableId`）
+  6) 删除表实体（`Table`）
+
+- 删除项目（Project）推荐事务顺序（含级联清理）
+  1) 查出项目下任务 `Task` → 查出任务下表 `Table`
+  2) 对所有表执行上述“删除表”事务序列（视图→记录→字段→附件→表）
+  3) 删除任务（`Task`）
+  4) 删除项目（`Project`）
+
+- 经验原则
+  - 先删“从表/依赖项”，再删“主表/被依赖项”。
+  - 若新增模型或外键，请在实现删除逻辑时将其纳入上述顺序。
+  - 如需冪等性增强，可在删除字段前再次按 `fieldId` 清理 `RecordsData`。
+
+- 代码位置
+  - 表删除逻辑：`apps/server/src/modules/tables/tables.controller.ts`（已按上述顺序实现）
+  - 项目删除逻辑：`apps/server/src/modules/projects/projects.controller.ts`（递归清理）
+
+以上约定用于防止未来改动回归外键约束问题，请在评审与开发中坚持该顺序。

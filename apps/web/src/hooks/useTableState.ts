@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { SortingState } from '@tanstack/react-table';
 import type { RowRecord, SelectOption, FormulaConfig, NumberFormat } from '../types';
+import { apiListRecords } from '../services/records';
+import { apiListFields, mapBackendTypeToUI } from '../services/fields';
 
 export type TableState = {
   data: RowRecord[];
@@ -8,6 +10,7 @@ export type TableState = {
   columnOrder: string[];
   columnVisibility: Record<string, boolean>;
   sorting: SortingState;
+  backendLoaded: boolean;
 };
 
 type UseTableStateParams = {
@@ -33,6 +36,7 @@ export function useTableState(params: UseTableStateParams) {
       columnOrder: Object.keys(initialColumnMeta),
       columnVisibility: {},
       sorting: [],
+      backendLoaded: false,
     },
   }));
 
@@ -105,7 +109,7 @@ export function useTableState(params: UseTableStateParams) {
     }));
   };
 
-  // 当切换到新的表 ID 时，初始化其默认结构与数据
+  // 当切换到新的表 ID 时，初始化其默认结构与数据，并尝试后端拉取
   useEffect(() => {
     setTables(prev => {
       if (activeTableId in prev) return prev;
@@ -117,10 +121,92 @@ export function useTableState(params: UseTableStateParams) {
           columnOrder: Object.keys(initialColumnMeta),
           columnVisibility: {},
           sorting: [],
+          backendLoaded: false,
         },
       };
     });
   }, [activeTableId, generateRows, initialColumnMeta]);
+
+  // 后端拉取：每次切换或首次渲染都尝试从服务端读取数据
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        // 先拉取字段列表，若为空则进行“空表自举”：创建序号/文本/时间三字段
+        let fields = await apiListFields(activeTableId);
+        if (!cancelled && Array.isArray(fields) && fields.length > 0) {
+          setTables(prev => {
+            const id = activeTableId in prev ? activeTableId : initialTableId;
+            const curr = prev[id];
+            const nextMeta = Object.fromEntries(fields.map((f) => [f.id, { name: f.name, type: mapBackendTypeToUI(f.type) }]));
+            const nextOrder = fields.map(f => f.id);
+            return { ...prev, [id]: { ...curr, columnMeta: nextMeta as any, columnOrder: nextOrder } };
+          });
+        } else if (!cancelled) {
+          try {
+            const mod = await import('../services/fields');
+            await mod.apiCreateField(activeTableId, { name: '序号', type: 'NUMBER', order: 1, visible: true });
+            await mod.apiCreateField(activeTableId, { name: '文本', type: 'TEXT', order: 2, visible: true });
+            await mod.apiCreateField(activeTableId, { name: '时间', type: 'DATE', order: 3, visible: true });
+            fields = await apiListFields(activeTableId);
+            if (!cancelled && Array.isArray(fields) && fields.length > 0) {
+              setTables(prev => {
+                const id = activeTableId in prev ? activeTableId : initialTableId;
+                const curr = prev[id];
+                const nextMeta = Object.fromEntries(fields.map((f) => [f.id, { name: f.name, type: mapBackendTypeToUI(f.type) }]));
+                const nextOrder = fields.map(f => f.id);
+                return { ...prev, [id]: { ...curr, columnMeta: nextMeta as any, columnOrder: nextOrder } };
+              });
+            }
+          } catch {}
+        }
+
+        // 拉取记录；若为空则插入15条默认记录后再拉取
+        let list = await apiListRecords(activeTableId, { page: 1, pageSize: 200 });
+        if (!cancelled) {
+          setTables(prev => {
+            const id = activeTableId in prev ? activeTableId : initialTableId;
+            const curr = prev[id];
+            const rows: RowRecord[] = Array.isArray(list.items) ? list.items.map((it: any) => ({ ...it })) : [];
+            return { ...prev, [id]: { ...curr, data: rows, backendLoaded: true } };
+          });
+        }
+
+        if (!cancelled && Array.isArray(list.items) && list.items.length === 0) {
+          try {
+            const { apiBatchRecords } = await import('../services/records');
+            // 使用后端字段ID写入默认行，避免写入失败
+            const nameToId = new Map((fields || []).map((f: any) => [f.name, f.id]));
+            const seqId = nameToId.get('序号');
+            const textId = nameToId.get('文本');
+            const timeId = nameToId.get('时间');
+            const createPayload = Array.from({ length: 15 }).map((_, i) => ({
+              data: {
+                ...(seqId ? { [seqId]: i + 1 } : {}),
+                ...(textId ? { [textId]: '' } : {}),
+                ...(timeId ? { [timeId]: null } : {}),
+              },
+            }));
+            await apiBatchRecords(activeTableId, { create: createPayload });
+          } catch {}
+          if (!cancelled) {
+            list = await apiListRecords(activeTableId, { page: 1, pageSize: 200 });
+            setTables(prev => {
+              const id = activeTableId in prev ? activeTableId : initialTableId;
+              const curr = prev[id];
+              const rows: RowRecord[] = Array.isArray(list.items) ? list.items.map((it: any) => ({ ...it })) : [];
+              return { ...prev, [id]: { ...curr, data: rows, backendLoaded: true } };
+            });
+          }
+        }
+      } catch (e) {
+        // 若拉取失败（如权限或网络），保留现有示例数据，不破坏交互
+        // 可在上层展示错误提示
+      }
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, [activeTableId, initialTableId]);
 
   return {
     activeTableId,
@@ -131,6 +217,7 @@ export function useTableState(params: UseTableStateParams) {
     columnOrder,
     columnVisibility,
     sorting,
+    backendLoaded: currentTable.backendLoaded,
     setData,
     setColumnMeta,
     setColumnOrder,

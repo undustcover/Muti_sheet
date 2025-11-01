@@ -18,6 +18,7 @@ import { ImportModule } from './import/import.module';
 import { AttachmentsModule } from './attachments/attachments.module';
 import { HomeModule } from './home/home.module';
 import { SpaceModule } from './space/space.module';
+import { TasksModule } from './tasks/tasks.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { SpaceModule } from './space/space.module';
     AttachmentsModule,
     HomeModule,
     SpaceModule,
+    TasksModule,
   ],
   controllers: [HealthController, MetricsController, InternalController],
   providers: [],

@@ -33,6 +33,7 @@ import { useViews } from './hooks/useViews';
 import { useTopbarActions } from './hooks/useTopbarActions';
 import { useToolbarActions } from './hooks/useToolbarActions';
 import { getView, upsertView, listViews, removeView } from './services/viewsStore';
+import { navigateTo } from './router';
 
 const initialOptions: SelectOption[] = [
   { id: 'opt-1', label: '需求' },
@@ -40,7 +41,7 @@ const initialOptions: SelectOption[] = [
   { id: 'opt-3', label: '完成' },
 ];
 
-export default function App() {
+export default function App({ initialTableId }: { initialTableId?: string }) {
   const { show } = useToast();
   const [activeNav, setActiveNav] = useState<string>('table');
   const [externalNewTable, setExternalNewTable] = useState<{ id: string; name: string; description?: string } | null>(null);
@@ -121,7 +122,8 @@ export default function App() {
     setColumnVisibility,
     setSorting,
     createTable,
-  } = useTableState({ initialTableId: 'tbl-1', initialColumnMeta, generateRows: generateMockRows, initialRowCount: 15 });
+    backendLoaded,
+  } = useTableState({ initialTableId: initialTableId ?? 'tbl-1', initialColumnMeta, generateRows: generateMockRows, initialRowCount: 0 });
 
   // 永久隐藏 id（首字段）
   useEffect(() => {
@@ -129,7 +131,112 @@ export default function App() {
       setColumnVisibility(prev => ({ ...prev, id: false }));
     }
   }, [columnVisibility, setColumnVisibility]);
+  
+  // 将当前激活的表同步到 URL，刷新后仍打开同一张表
+  useEffect(() => {
+    if (activeTableId) {
+      navigateTo(`/table/${activeTableId}`);
+    }
+  }, [activeTableId]);
   void activeTableId; // 保留以兼容未来逻辑
+
+  // 写回后端：包装 setData，计算增量并调用 records 服务
+  const setDataPersist = async (updater: RowRecord[] | ((prev: RowRecord[]) => RowRecord[])) => {
+    const prev = data;
+    const next = typeof updater === 'function' ? (updater as (p: RowRecord[]) => RowRecord[])(prev) : updater;
+
+    // 计算 diff
+    const prevMap = new Map(prev.map(r => [r.id, r]));
+    const nextMap = new Map(next.map(r => [r.id, r]));
+    const createRows: RowRecord[] = [];
+    const updatePatches: Array<{ recordId: string; data: Record<string, any> }> = [];
+    const deleteIds: string[] = [];
+
+    // 新增：在 next 中存在但 prev 中不存在的行
+    for (const row of next) {
+      if (!prevMap.has(row.id)) {
+        createRows.push(row);
+      }
+    }
+    // 删除：在 prev 中存在但 next 中不存在的行
+    for (const row of prev) {
+      if (!nextMap.has(row.id)) {
+        deleteIds.push(row.id);
+      }
+    }
+    // 更新：两边都在，但字段值有变化（逐字段比较）
+    for (const row of next) {
+      const old = prevMap.get(row.id);
+      if (!old) continue;
+      const patch: Record<string, any> = {};
+      for (const cid of columnOrder) {
+        if (cid === 'id') continue;
+        const nv = (row as any)[cid];
+        const ov = (old as any)[cid];
+        const changed = JSON.stringify(nv) !== JSON.stringify(ov);
+        if (changed) patch[cid] = nv;
+      }
+      if (Object.keys(patch).length > 0) {
+        updatePatches.push({ recordId: row.id, data: patch });
+      }
+    }
+
+    // 先处理创建：需要拿回后端生成的 ID 并更新本地行 ID，避免后续更新/删除错位
+    let nextApplied = next.slice();
+    const isLocalTableId = !!activeTableId && activeTableId.startsWith('tbl-');
+    const createdIdMap: Record<string, string> = {};
+    if (createRows.length > 0 && activeTableId && !isLocalTableId) {
+      for (let i = 0; i < nextApplied.length; i++) {
+        const row = nextApplied[i];
+        const isNew = !prevMap.has(row.id);
+        if (!isNew) continue;
+        const payload: Record<string, any> = {};
+        for (const cid of columnOrder) {
+          if (cid === 'id') continue;
+          payload[cid] = (row as any)[cid];
+        }
+        try {
+          const { apiCreateRecord } = await import('./services/records');
+          const created = await trackSave(apiCreateRecord(activeTableId, payload));
+          // 用真实ID替换临时ID
+          createdIdMap[row.id] = created.id;
+          nextApplied[i] = { ...row, id: created.id } as any;
+        } catch (e: any) {
+          // 创建失败：保留临时ID，后续用户可重试；弹出错误提示
+          show(`创建记录失败：${e?.message || e}`, 'error');
+        }
+      }
+    }
+
+    // 本地立即更新，保证交互流畅
+    setData(nextApplied);
+
+    // 后台更新与删除：真实后端表直接写回；本地示例表不写回
+    if (activeTableId && !isLocalTableId) {
+      try {
+        const { apiBatchRecords, apiUpdateRecord } = await import('./services/records');
+        // 将刚创建的临时ID映射为后端真实ID；新建的记录不需要再做更新
+        const remappedDeletes = deleteIds.map((id) => createdIdMap[id] ?? id);
+        const remappedUpdates = updatePatches
+          .filter((u) => !createdIdMap[u.recordId])
+          .map((u) => ({ recordId: createdIdMap[u.recordId] ?? u.recordId, data: u.data }));
+        // 批量删除
+        if (remappedDeletes.length > 0 && activeTableId) {
+          void trackSave(apiBatchRecords(activeTableId, { delete: remappedDeletes })).catch((e: any) => {
+            show(`删除记录失败：${e?.message || e}`, 'error');
+          });
+        }
+        // 更新：逐条局部更新
+        for (const u of remappedUpdates) {
+          void trackSave(apiUpdateRecord(u.recordId, u.data)).catch((e: any) => {
+            show(`更新记录失败：${e?.message || e}`, 'error');
+          });
+        }
+      } catch (e: any) {
+        show(`保存到后端失败：${e?.message || e}`, 'error');
+      }
+    }
+  };
 
   // 每次切换表时，加载该表的视图；若没有则创建默认主数据表视图
   useEffect(() => {
@@ -157,6 +264,17 @@ export default function App() {
   const [selectedCell, setSelectedCell] = useState<{ rowId: string | null; columnId: string | null }>({ rowId: null, columnId: null });
   const [editingCell, setEditingCell] = useState<{ rowId: string | null; columnId: string | null }>({ rowId: null, columnId: null });
 
+  // 自动保存状态：并发中的保存请求计数
+  const [savingCount, setSavingCount] = useState(0);
+  const trackSave = async <T,>(p: Promise<T>): Promise<T> => {
+    setSavingCount(c => c + 1);
+    try {
+      return await p;
+    } finally {
+      setSavingCount(c => (c > 0 ? c - 1 : 0));
+    }
+  };
+
   // 撤销/重做
   const {
     histSetData,
@@ -166,6 +284,8 @@ export default function App() {
     histSetSorting,
     undo,
     redo,
+    pushUndo,
+    clearRedo,
   } = useHistoryState({
     data,
     columnMeta,
@@ -180,6 +300,9 @@ export default function App() {
     show,
     requestMeasure,
   });
+
+  // 历史包装的持久化 setData：与原 histSetData 行为一致，但写回后端
+  const histSetDataPersist = (updater: any) => { pushUndo(); clearRedo(); return setDataPersist(updater); };
 
   const fieldOps = useFieldOps({
     columnMeta,
@@ -283,36 +406,7 @@ export default function App() {
 
   const { getCellBg } = useColorRules({ rules, columnMeta: logicColumnMeta, columnColors });
 
-  // 主页/空间数据
-  const [recentTables, setRecentTables] = useState<Array<{ id: string; name: string; description?: string }>>([]);
-  const [spaceMy, setSpaceMy] = useState<Array<{ id: string; name: string; tables?: Array<{ id: string; name: string; description?: string }> }>>([]);
-  const [spacePublic, setSpacePublic] = useState<Array<{ id: string; name: string; tables?: Array<{ id: string; name: string; description?: string }> }>>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        if (activeNav === 'home') {
-          const { apiListRecentTables } = await import('./services/home');
-          const list = await apiListRecentTables();
-          if (!cancelled) setRecentTables(list.map(it => ({ id: it.id, name: it.name, description: it.description })));
-        } else if (activeNav === 'space-my') {
-          const { apiListMySpace } = await import('./services/space');
-          const projs = await apiListMySpace();
-          if (!cancelled) setSpaceMy(projs.map(p => ({ id: p.id, name: p.name, tables: p.tables || [] })));
-        } else if (activeNav === 'space-public') {
-          const { apiListPublicSpace } = await import('./services/space');
-          const projs = await apiListPublicSpace();
-          if (!cancelled) setSpacePublic(projs.map(p => ({ id: p.id, name: p.name, tables: p.tables || [] })));
-        }
-      } catch (err) {
-        console.error(err);
-        show('加载列表失败', 'warning');
-      }
-    };
-    load();
-    return () => { cancelled = true; };
-  }, [activeNav]);
+  // 已将主页与空间数据迁移至 HomePage
 
   const countGroupConds = (grp: any): number => {
     if (!grp || !Array.isArray(grp.conditions)) return 0;
@@ -344,7 +438,7 @@ export default function App() {
   const { onExport } = useImportExport({ data, setData: histSetData, columnMeta, show, requestMeasure });
 
   const onImport = ({ fileName, sheetName, header, rows }: { fileName: string; sheetName: string; header: any[]; rows: any[][] }) => {
-    const newTableId = `tbl-import-${Date.now()}`;
+    const importedTableName = fileName || '导入数据表';
 
     // 生成列ID与名称
     const colInfo = header.map((name: any, idx: number) => ({ id: `col_${idx + 1}`, name: String(name ?? `列${idx + 1}`) }));
@@ -382,20 +476,78 @@ export default function App() {
       });
       return obj;
     });
-    // 在指定的新表ID下写入结构与数据
-    createTable(newTableId, {
-      columnMeta: nextMeta as any,
-      columnOrder: colInfo.map(c => c.id),
-      data: nextData as any,
-      columnVisibility: {},
-      sorting: [],
-    });
-    // 自动切换到新表
-    setActiveTableId(newTableId);
-    // 在侧栏显示并命名为文件名
-    setExternalNewTable({ id: newTableId, name: fileName });
-    show(`已创建并切换到新表（${fileName}），导入 ${nextData.length} 行，工作表：${sheetName}`, 'success');
-    requestMeasure();
+
+    // 尝试在后端创建项目/任务/表，并同步字段与数据
+    (async () => {
+      try {
+        const { apiListMySpace, notifySpaceChanged } = await import('./services/space');
+        const space = await apiListMySpace();
+        let projectId: string | undefined = space?.[0]?.id;
+
+        if (!projectId) {
+          const { apiCreateProject } = await import('./services/projects');
+          const project = await trackSave(apiCreateProject('导入项目'));
+          projectId = project.id;
+        }
+
+        let taskId: string | undefined = undefined;
+        try {
+          const { apiListTasks } = await import('./services/tasks');
+          const tasks = await apiListTasks(projectId!);
+          taskId = tasks?.[0]?.id;
+        } catch {}
+        if (!taskId) {
+          const { apiCreateTask } = await import('./services/tasks');
+          const task = await trackSave(apiCreateTask(projectId!, '导入任务'));
+          taskId = task.id;
+        }
+
+        const { apiCreateTable } = await import('./services/tables');
+        const table = await trackSave(apiCreateTable(projectId!, importedTableName, undefined, taskId));
+
+        // 创建字段
+        const { apiCreateField } = await import('./services/fields');
+        const typeMap: Record<string, 'TEXT' | 'NUMBER' | 'DATE'> = { text: 'TEXT', number: 'NUMBER', date: 'DATE' };
+        for (let i = 0; i < colInfo.length; i++) {
+          const col = colInfo[i];
+          const backendType = typeMap[nextMeta[col.id].type] || 'TEXT';
+          await trackSave(apiCreateField(table.id, { name: col.name, type: backendType, order: i + 1, visible: true }));
+        }
+
+        // 批量创建记录
+        const { apiBatchRecords } = await import('./services/records');
+        const createPayload = nextData.map((row) => {
+          const data: Record<string, any> = {};
+          for (const key of Object.keys(row)) {
+            if (key === 'id') continue;
+            data[key] = (row as any)[key];
+          }
+          return { data };
+        });
+        if (createPayload.length > 0) {
+          await trackSave(apiBatchRecords(table.id, { create: createPayload }));
+        }
+
+        // 切换到后端表，并通知空间刷新
+        setActiveTableId(table.id);
+        show(`已创建并切换到后端新表（${importedTableName}），导入 ${nextData.length} 行，工作表：${sheetName}`, 'success');
+        requestMeasure();
+        notifySpaceChanged();
+      } catch (e: any) {
+        console.error('导入并同步到后端失败，回退到本地示例表：', e);
+        const newTableId = `tbl-import-${Date.now()}`;
+        createTable(newTableId, {
+          columnMeta: nextMeta as any,
+          columnOrder: colInfo.map(c => c.id),
+          data: nextData as any,
+          columnVisibility: {},
+          sorting: [],
+        });
+        setActiveTableId(newTableId);
+        show(`后端同步失败，已创建本地示例表（${importedTableName}），导入 ${nextData.length} 行，工作表：${sheetName}`, 'warning');
+        requestMeasure();
+      }
+    })();
   };
 
   // 列变更
@@ -475,8 +627,30 @@ export default function App() {
 
   return (
     <>
+      {/* 轻量状态指示：自动保存中 */}
+      {savingCount > 0 && (
+        <div style={{ position: 'fixed', top: 8, left: 8, zIndex: 1000, padding: '4px 8px', borderRadius: 6, background: '#fff', border: '1px solid #ddd', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', color: '#555', fontSize: 12 }}>
+          自动保存中...
+        </div>
+      )}
       <PageLayout
-        sidebar={<Sidebar active={activeNav} onNavigate={setActiveNav} onSelectTable={(id) => setActiveTableId(id)} externalNewTable={externalNewTable} />}
+        sidebar={<Sidebar
+          active={activeNav}
+          onNavigate={(key) => {
+            // 将主页/空间/文件夹导向路由的首页
+            if (key === 'home' || key === 'space-my' || key === 'space-public' || key === 'files') {
+              navigateTo('/home');
+              return;
+            }
+            setActiveNav(key);
+          }}
+          onSelectTable={(id) => setActiveTableId(id)}
+          externalNewTable={externalNewTable}
+          onSelectSpaceNode={() => {
+            // 选择空间节点时跳转到首页，由首页负责过滤展示
+            navigateTo('/home');
+          }}
+        />}
         header={(
           <TopBar
             views={viewsWithKind}
@@ -556,62 +730,7 @@ export default function App() {
           </div>
         )}
       >
-        {activeNav === 'home' && (
-          <div style={{ padding: 16 }}>
-            <h3>最近编辑的数据表</h3>
-            {recentTables.length === 0 && <div style={{ color: '#666' }}>暂无最近编辑数据表</div>}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
-              {recentTables.map(tb => (
-                <div key={tb.id} style={{ border: '1px solid #eee', borderRadius: 8, padding: 12, background: '#fff', cursor: 'pointer' }}
-                  onClick={() => { setActiveTableId(tb.id); setActiveNav('table'); }}>
-                  <div style={{ fontWeight: 600 }}>{tb.name}</div>
-                  {tb.description && <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>{tb.description}</div>}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {activeNav === 'space-my' && (
-          <div style={{ padding: 16 }}>
-            <h3>我的空间</h3>
-            {spaceMy.length === 0 && <div style={{ color: '#666' }}>暂无项目</div>}
-            {spaceMy.map(p => (
-              <div key={p.id} style={{ marginBottom: 16 }}>
-                <div style={{ fontWeight: 700 }}>{p.name}</div>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
-                  {(p.tables || []).map(tb => (
-                    <div key={tb.id} style={{ padding: '8px 10px', border: '1px solid #eee', borderRadius: 6, background: '#fff', cursor: 'pointer' }}
-                      onClick={() => { setActiveTableId(tb.id); setActiveNav('table'); }}>
-                      {tb.name}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {activeNav === 'space-public' && (
-          <div style={{ padding: 16 }}>
-            <h3>项目空间（匿名只读）</h3>
-            {spacePublic.length === 0 && <div style={{ color: '#666' }}>暂无公开项目</div>}
-            {spacePublic.map(p => (
-              <div key={p.id} style={{ marginBottom: 16 }}>
-                <div style={{ fontWeight: 700 }}>{p.name}</div>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
-                  {(p.tables || []).map(tb => (
-                    <div key={tb.id} style={{ padding: '8px 10px', border: '1px solid #eee', borderRadius: 6, background: '#fff', cursor: 'pointer' }}
-                      onClick={() => { setActiveTableId(tb.id); setActiveNav('table'); }}>
-                      {tb.name}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
+        {/* 主页/空间/文件夹已拆分至 HomePage */}
         {activeNav === 'table' && (
           <>
             
@@ -625,7 +744,7 @@ export default function App() {
               setSorting={setSorting}
               setColumnVisibility={setColumnVisibility as any}
               setColumnOrder={setColumnOrder}
-              setData={histSetData as any}
+              setData={histSetDataPersist as any}
               setColumnMeta={setColumnMeta as any}
               rowHeight={rowHeight}
               freezeCount={freezeCount}
@@ -771,12 +890,7 @@ export default function App() {
           </div>
         )}
 
-        {activeNav === 'files' && (
-          <div style={{ padding: 24 }}>
-            <h3>文件夹</h3>
-            <p>文件管理与预览（占位）。</p>
-          </div>
-        )}
+        {/* 文件夹入口已移至主页 */}
       </PageLayout>
 
       {/* 浮层：保护设置 */}

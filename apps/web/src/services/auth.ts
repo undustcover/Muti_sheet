@@ -54,6 +54,7 @@ export async function login(email: string, password: string) {
     finalUser = await fetchMe();
   }
   if (finalUser) setUser(finalUser);
+  notifyAuthChanged();
   return { token, user: finalUser };
 }
 
@@ -69,6 +70,7 @@ export async function logout() {
   } finally {
     setToken(null);
     setUser(null);
+    notifyAuthChanged();
   }
 }
 
@@ -102,3 +104,9 @@ export function authHeaders() {
 }
 
 export { API_BASE };
+
+export function notifyAuthChanged() {
+  try {
+    window.dispatchEvent(new CustomEvent('auth:changed'));
+  } catch {}
+}

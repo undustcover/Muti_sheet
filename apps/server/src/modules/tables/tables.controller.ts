@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards, ForbiddenException, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards, ForbiddenException, UseInterceptors, BadRequestException, Delete } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTableDto } from './dto/create-table.dto';
@@ -22,9 +22,14 @@ export class TablesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'OWNER')
   @Post()
-  async create(@Param('projectId') projectId: string, @Body() dto: CreateTableDto) {
+  async create(@Param('projectId') projectId: string, @Body() dto: CreateTableDto, @Req() req: any) {
+    if (dto.taskId) {
+      const task = await this.prisma.task.findUnique({ where: { id: dto.taskId }, select: { projectId: true } });
+      if (!task) throw new BadRequestException('任务不存在');
+      if (task.projectId !== projectId) throw new ForbiddenException('任务不属于该项目');
+    }
     const table = await this.prisma.table.create({
-      data: { name: dto.name, projectId, isAnonymousReadEnabled: dto.isAnonymousReadEnabled ?? false },
+      data: { name: dto.name, projectId, taskId: dto.taskId, isAnonymousReadEnabled: dto.isAnonymousReadEnabled ?? false, creatorId: req.user?.userId },
     });
     return table;
   }
@@ -55,5 +60,66 @@ export class TablesController {
   @Patch('/:tableId')
   async update(@Param('tableId') tableId: string, @Body() dto: UpdateTableDto) {
     return this.prisma.table.update({ where: { id: tableId }, data: dto });
+  }
+
+  @ApiOperation({ summary: '删除表（需登录；管理员/拥有者或创建者）' })
+  @ApiOkResponse({ description: '删除成功返回表ID' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'OWNER', 'EDITOR', 'VIEWER')
+  @Delete('/:tableId')
+  async remove(@Param('tableId') tableId: string, @Req() req: any) {
+    const role = req.user?.role as 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER' | undefined;
+    const userId = req.user?.userId as string | undefined;
+    const table = await this.prisma.table.findUnique({ where: { id: tableId }, select: { creatorId: true } });
+    if (!table) throw new BadRequestException('数据表不存在');
+    const isPrivileged = role === 'ADMIN' || role === 'OWNER';
+    const isCreator = !!userId && table.creatorId === userId;
+    if (!isPrivileged && !isCreator) {
+      throw new ForbiddenException('你没有权限删除其他人的表格');
+    }
+    await this.prisma.$transaction(async (tx) => {
+      try {
+        const views = await tx.view.findMany({ where: { tableId }, select: { id: true } });
+        const viewIds = views.map((v) => v.id);
+        if (viewIds.length) {
+          await tx.viewShare.deleteMany({ where: { viewId: { in: viewIds } } });
+          await tx.view.deleteMany({ where: { id: { in: viewIds } } });
+        }
+      } catch (e) {
+        console.error('TablesController.remove delete views error:', { tableId, error: e });
+        throw e;
+      }
+      try {
+        const records = await tx.record.findMany({ where: { tableId }, select: { id: true } });
+        const recordIds = records.map((r) => r.id);
+        if (recordIds.length) {
+          await tx.recordsData.deleteMany({ where: { recordId: { in: recordIds } } });
+          await tx.attachment.deleteMany({ where: { recordId: { in: recordIds } } });
+          await tx.record.deleteMany({ where: { id: { in: recordIds } } });
+        }
+      } catch (e) {
+        console.error('TablesController.remove delete records error:', { tableId, error: e });
+        throw e;
+      }
+      try {
+        await tx.field.deleteMany({ where: { tableId } });
+      } catch (e) {
+        console.error('TablesController.remove delete fields error:', { tableId, error: e });
+        throw e;
+      }
+      try {
+        await tx.attachment.deleteMany({ where: { tableId } });
+      } catch (e) {
+        console.error('TablesController.remove delete table attachments error:', { tableId, error: e });
+        throw e;
+      }
+      try {
+        await tx.table.delete({ where: { id: tableId } });
+      } catch (e) {
+        console.error('TablesController.remove delete table error:', { tableId, error: e });
+        throw e;
+      }
+    });
+    return { id: tableId };
   }
 }

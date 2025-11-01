@@ -11,4 +11,9 @@ export class CreateTableDto {
   @IsOptional()
   @IsBoolean()
   isAnonymousReadEnabled?: boolean;
+
+  @ApiPropertyOptional({ example: 'task-uuid', description: '可选：所属任务ID（需隶属于同一项目）' })
+  @IsOptional()
+  @IsString()
+  taskId?: string;
 }

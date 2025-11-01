@@ -1,17 +1,25 @@
 import { useState, useEffect, useRef } from 'react';
 import { IconPlus, IconTask, IconTable, IconMore, IconChevronDown, IconChevronRight, IconCollect, IconDashboard, IconFolder } from './Icons';
+import { apiCreateProject } from '../services/projects';
+import { apiCreateTable, apiListTables, apiDeleteTable } from '../services/tables';
+import { apiDeleteTask } from '../services/tasks';
+import { apiDeleteProject } from '../services/projects';
+import { apiCreateTask, apiListTasks } from '../services/tasks';
+import { notifySpaceChanged, apiListMySpace } from '../services/space';
 import { colors } from '../design/tokens';
+import { useToast } from './Toast';
 
 type Props = {
   active: string;
   onNavigate: (key: string) => void;
   onSelectTable?: (tableId: string) => void;
   externalNewTable?: { id: string; name: string; description?: string } | null;
+  onSelectSpaceNode?: (scope: 'my' | 'public', level: 'project' | 'task' | 'table', id: string) => void;
 };
 
-type DataTable = { id: string; name: string; description: string };
+type DataTable = { id: string; name: string; description: string; projectId?: string };
 type Task = { id: string; name: string; tables: DataTable[] };
-type Project = { id: string; name: string; tasks: Task[] };
+type Project = { id: string; name: string; tasks: Task[]; source?: 'local' | 'server' };
 
 const SectionTitle: React.FC<{ title: string; onAdd?: () => void; addDisabled?: boolean; addTooltip?: string }> = ({ title, onAdd, addDisabled, addTooltip }) => (
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, color: 'var(--muted)', padding: '8px 12px', textTransform: 'uppercase' }}>
@@ -162,19 +170,40 @@ const Modal: React.FC<{ open: boolean; title: string; children: React.ReactNode;
   );
 };
 
-export const Sidebar: React.FC<Props> = ({ active, onNavigate, onSelectTable, externalNewTable }) => {
+// 已移除与主页空间相关的服务引用
+
+export const Sidebar: React.FC<Props> = ({ active, onNavigate, onSelectTable, externalNewTable, onSelectSpaceNode }) => {
   // 保留 active 参数避免未来用到，同时避免未使用参数报错
   void active;
-  const [projects, setProjects] = useState<Project[]>([{
-    id: 'p-1', name: '项目A', tasks: [
-      { id: 't-1', name: '任务A-1', tables: [{ id: 'tbl-1', name: '数据表1', description: '示例数据表' }] }
-    ]
-  }]);
+  const { show } = useToast();
+  // 项目/任务/表树（从后端加载）
+  const [projects, setProjects] = useState<Project[]>([]);
+  // 从后端“我的空间”加载的项目列表（仅用于下拉选择）
+  const [myProjects, setMyProjects] = useState<Array<{ id: string; name: string }>>([]);
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const list = await apiListMySpace();
+        if (!mounted) return;
+        setMyProjects(list.map(p => ({ id: p.id, name: p.name })));
+      } catch (err: any) {
+        console.warn('加载我的空间项目失败：', err);
+        const msg = err?.message || '';
+        if (msg.includes('未登录')) {
+          show('登录状态失效，已跳转到登录页面', 'warning');
+        } else {
+          show('加载我的空间项目失败', 'info');
+        }
+      }
+    })();
+    return () => { mounted = false; };
+  }, [show]);
   // 组件状态：展开
-  const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({ 'p-1': true });
-  const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({ 't-1': true });
+  const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
+  const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
   // 当前选中的数据表ID（用于高亮与独立选中）
-  const [activeTableId, setActiveTableId] = useState<string | null>('tbl-1');
+  const [activeTableId, setActiveTableId] = useState<string | null>(null);
   
   // 新建弹窗所需状态
   const [composeOpen, setComposeOpen] = useState(false);
@@ -183,6 +212,7 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate, onSelectTable, ex
   const [composeDesc, setComposeDesc] = useState('');
   const [composeProjectId, setComposeProjectId] = useState<string | null>(null);
   const [composeTaskId, setComposeTaskId] = useState<string | null>(null);
+  const [composeTaskOptions, setComposeTaskOptions] = useState<Array<{ id: string; name: string }>>([]);
   
   // 新增：专业栏简单条目类型
   type SimpleItem = { id: string; name: string };
@@ -197,34 +227,171 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate, onSelectTable, ex
     setComposeDesc('');
     setComposeProjectId(projectId ?? null);
     setComposeTaskId(taskId ?? null);
+    if (type === 'table' && projectId) {
+      (async () => {
+        try {
+          // 先从本地树获取任务，后合并远端结果
+          const prj = projects.find(p => p.id === projectId);
+          const localTasks = (prj?.tasks || []).filter(t => !String(t.id).includes('::uncategorized')).map(t => ({ id: t.id, name: t.name }));
+          setComposeTaskOptions(localTasks);
+          const tasks = await apiListTasks(projectId);
+          const mergedMap = new Map<string, { id: string; name: string }>();
+          [...localTasks, ...tasks].forEach(t => mergedMap.set(t.id, t));
+          setComposeTaskOptions(Array.from(mergedMap.values()));
+        } catch (err) {
+          console.warn('加载项目任务失败：', err);
+          // 保留本地列表作为兜底
+          const prj = projects.find(p => p.id === projectId);
+          const localTasks = (prj?.tasks || []).filter(t => !String(t.id).includes('::uncategorized')).map(t => ({ id: t.id, name: t.name }));
+          setComposeTaskOptions(localTasks);
+        }
+      })();
+    } else {
+      setComposeTaskOptions([]);
+    }
   };
+
+  // 加载我的空间（项目→任务→数据表）并映射到本组件树结构
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await apiListMySpace();
+        if (cancelled) return;
+        const mapped: Project[] = list.map(p => {
+          const tasks = Array.isArray(p.tasks) ? p.tasks.map(t => ({
+            id: t.id,
+            name: t.name,
+            tables: Array.isArray(t.tables) ? t.tables.map(tb => ({ id: tb.id, name: tb.name, description: '', projectId: (tb as any).projectId })) : [],
+          })) : [];
+          // 若存在顶层未归属任务的表，则归入“未归属任务”分组
+          const topTables = Array.isArray(p.tables) ? p.tables : [];
+          const withUncat = topTables.length > 0 ? tasks.concat([{ id: `${p.id}::uncategorized`, name: '未归属任务', tables: topTables.map(tb => ({ id: tb.id, name: tb.name, description: '', projectId: (tb as any).projectId })) }]) : tasks;
+          return { id: p.id, name: p.name, tasks: withUncat, source: 'server' };
+        });
+        setProjects(mapped);
+        // 默认展开首个项目/任务，便于用户发现层级
+        if (mapped[0]) {
+          setExpandedProjects(e => ({ ...e, [mapped[0].id]: true }));
+          const firstTask = mapped[0].tasks[0];
+          if (firstTask) setExpandedTasks(e => ({ ...e, [firstTask.id]: true }));
+        }
+        // 首次登录：若空间为空，自动创建默认项目/任务/数据表
+        // 避免重复触发，使用 ref 标记
+        defaultsInitRef.current ||= false;
+        if (!defaultsInitRef.current && mapped.length === 0) {
+          defaultsInitRef.current = true;
+          try {
+            const prj = await apiCreateProject('默认项目');
+            setProjects(prev => [...prev, { id: prj.id, name: prj.name, tasks: [], source: 'server' }]);
+            setMyProjects(prev => [...prev, { id: prj.id, name: prj.name }]);
+            const task = await apiCreateTask(prj.id, '默认任务');
+            setProjects(prev => prev.map(p => p.id === prj.id ? { ...p, tasks: [...p.tasks, { id: task.id, name: task.name, tables: [] }] } : p));
+            const table = await apiCreateTable(prj.id, '默认数据表', undefined, task.id);
+            setProjects(prev => prev.map(p => p.id === prj.id ? {
+              ...p,
+              tasks: p.tasks.map(t => t.id === task.id ? { ...t, tables: [...t.tables, { id: table.id, name: table.name, description: '', projectId: prj.id }] } : t)
+            } : p));
+            setExpandedProjects(e => ({ ...e, [prj.id]: true }));
+            setExpandedTasks(e => ({ ...e, [task.id]: true }));
+            notifySpaceChanged();
+            show('已为您创建默认项目/任务/数据表', 'success');
+          } catch (e) {
+            console.warn('默认资源创建失败：', e);
+          }
+        }
+      } catch (err: any) {
+        console.warn('加载侧边栏空间失败：', err);
+        const msg = err?.message || '';
+        if (msg.includes('未登录')) {
+          show('登录状态失效，已跳转到登录页面', 'warning');
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [show]);
   
   const closeCompose = () => setComposeOpen(false);
   
-  const confirmCompose = () => {
+  const confirmCompose = async () => {
     if (!composeType) return;
     const name = composeName.trim();
     if (!name) { window.alert('请输入名称'); return; }
     if (composeType === 'project') {
-      setProjects(prev => [...prev, { id: `p-${prev.length + 1}-${Date.now()}`, name, tasks: [] }]);
+      try {
+        const created = await apiCreateProject(name);
+        setProjects(prev => [...prev, { id: created.id, name: created.name, tasks: [], source: 'server' }]);
+        // 立刻同步到“我的项目”下拉，避免需要返回主页刷新
+        setMyProjects(prev => {
+          const exists = prev.some(p => p.id === created.id);
+          return exists ? prev : [...prev, { id: created.id, name: created.name }];
+        });
+        notifySpaceChanged();
+        show('项目已创建并持久化', 'success');
+      } catch (err: any) {
+        console.warn('后端创建项目失败：', err);
+        const msg = err?.message || '';
+        show(msg || '创建项目失败', 'error');
+        return;
+      }
     } else if (composeType === 'task') {
       if (!composeProjectId) { window.alert('请选择所属项目'); return; }
-      setProjects(prev => prev.map(p => p.id === composeProjectId ? { ...p, tasks: [...p.tasks, { id: `t-${p.tasks.length + 1}-${Date.now()}`, name, tables: [] }] } : p));
-      setExpandedProjects(e => ({ ...e, [composeProjectId]: true }));
+      const inMy = myProjects.find(p => p.id === composeProjectId);
+      if (!inMy) { show('请选择后端项目进行创建', 'warning'); return; }
+      try {
+        const t = await apiCreateTask(composeProjectId, name, composeDesc.trim() || undefined);
+        // 将新任务添加到本地侧边栏树（若本地无该项目则补一个占位）
+        setProjects(prev => {
+          const exists = prev.find(p => p.id === composeProjectId);
+          if (!exists) {
+            return [...prev, { id: composeProjectId, name: inMy.name, tasks: [{ id: t.id, name: t.name, tables: [] }], source: 'server' }];
+          }
+          return prev.map(p => p.id === composeProjectId ? { ...p, tasks: [...p.tasks, { id: t.id, name: t.name, tables: [] }] } : p);
+        });
+        setExpandedProjects(e => ({ ...e, [composeProjectId]: true }));
+        setExpandedTasks(e => ({ ...e, [t.id]: true }));
+        notifySpaceChanged();
+        show('任务已创建并持久化', 'success');
+      } catch (err: any) {
+        console.warn('创建任务失败：', err);
+        const msg = err?.message || '';
+        if (msg.includes('未登录')) {
+          show('登录状态失效，已跳转到登录页面', 'warning');
+        } else {
+          show(msg || '创建任务失败', 'error');
+        }
+        return;
+      }
     } else if (composeType === 'table') {
-      if (!composeProjectId || !composeTaskId) { window.alert('请选择所属项目和任务'); return; }
-      const description = composeDesc.trim();
-      const targetTask = projects.find(p => p.id === composeProjectId)?.tasks.find(t => t.id === composeTaskId);
-      const newId = `tbl-${(targetTask?.tables.length ?? 0) + 1}-${Date.now()}`;
-      setProjects(prev => prev.map(p => p.id === composeProjectId ? {
-        ...p,
-        tasks: p.tasks.map(t => t.id === composeTaskId ? { ...t, tables: [...t.tables, { id: newId, name, description }] } : t)
-      } : p));
-      setExpandedProjects(e => ({ ...e, [composeProjectId]: true }));
-      setExpandedTasks(e => ({ ...e, [composeTaskId]: true }));
-      setActiveTableId(newId);
-      onNavigate('table');
-      onSelectTable?.(newId);
+      if (!composeProjectId) { window.alert('请选择所属项目'); return; }
+      const inMy = myProjects.find(p => p.id === composeProjectId);
+      if (!inMy) { show('请选择后端项目进行创建', 'warning'); return; }
+      if (!composeTaskId) { window.alert('请选择所属任务'); return; }
+      try {
+        const tb = await apiCreateTable(composeProjectId, name, undefined, composeTaskId);
+        // 将新表追加到本地侧边栏树，避免需要返回主页
+        setProjects(prev => prev.map(p => p.id === composeProjectId ? {
+          ...p,
+          tasks: p.tasks.map(t => t.id === composeTaskId ? { ...t, tables: [...t.tables, { id: tb.id, name: tb.name, description: '', projectId: composeProjectId }] } : t)
+        } : p));
+        setExpandedProjects(e => ({ ...e, [composeProjectId]: true }));
+        setExpandedTasks(e => ({ ...e, [composeTaskId]: true }));
+        setActiveTableId(tb.id);
+        onNavigate('table');
+        onSelectTable?.(tb.id);
+        notifySpaceChanged();
+        try { await apiListTables(composeProjectId); } catch {}
+        show('数据表已创建并加入当前任务', 'success');
+      } catch (err: any) {
+        console.warn('保存新建数据表到后端失败：', err);
+        const msg = err?.message || '';
+        if (msg.includes('未登录')) {
+          show('登录状态失效，已跳转到登录页面', 'warning');
+        } else {
+          show(msg || '保存新建数据表失败', 'error');
+        }
+        return;
+      }
     } else if (composeType === 'collect') {
       const id = `collect-${collects.length + 1}-${Date.now()}`;
       setCollects(prev => [...prev, { id, name }]);
@@ -266,8 +433,27 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate, onSelectTable, ex
     if (!name) return;
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, name } : p));
   };
-  const deleteProject = (projectId: string) => {
-    setProjects(prev => prev.filter(p => p.id !== projectId));
+  const deleteProject = async (projectId: string) => {
+    const ok1 = window.confirm('确定要删除该项目吗？此操作不可撤销。');
+    if (!ok1) return;
+    const ok2 = window.confirm('删除将同时移除项目下的所有任务与数据表，是否继续？');
+    if (!ok2) return;
+    try {
+      await apiDeleteProject(projectId);
+      setProjects(prev => prev.filter(p => p.id !== projectId));
+      // 同步移除“我的项目”下拉中的已删除项目，避免在新建任务时仍可选到
+      setMyProjects(prev => prev.filter(p => p.id !== projectId));
+      setActiveTableId(null);
+      show('项目已删除并持久化', 'success');
+      notifySpaceChanged();
+    } catch (err: any) {
+      const msg = err?.message || '删除项目失败';
+      if (msg.includes('未登录')) {
+        show('登录状态失效，已跳转到登录页面', 'warning');
+      } else {
+        show(msg, 'error');
+      }
+    }
   };
 
   const renameTask = (projectId: string, taskId: string) => {
@@ -275,8 +461,28 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate, onSelectTable, ex
     if (!name) return;
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, tasks: p.tasks.map(t => t.id === taskId ? { ...t, name } : t) } : p));
   };
-  const deleteTask = (projectId: string, taskId: string) => {
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, tasks: p.tasks.filter(t => t.id !== taskId) } : p));
+  const deleteTask = async (projectId: string, taskId: string) => {
+    const ok1 = window.confirm('确定要删除该任务吗？此操作不可撤销。');
+    if (!ok1) return;
+    const ok2 = window.confirm('删除将同时移除任务下的所有数据表，是否继续？');
+    if (!ok2) return;
+    try {
+      await apiDeleteTask(projectId, taskId);
+      setProjects(prev => prev.map(p => p.id === projectId ? { ...p, tasks: p.tasks.filter(t => t.id !== taskId) } : p));
+      setActiveTableId(prev => {
+        const stillExists = projects.some(p => p.id === projectId && p.tasks.some(t => t.id !== taskId && t.tables.some(tb => tb.id === prev)));
+        return stillExists ? prev : null;
+      });
+      show('任务已删除并持久化', 'success');
+      notifySpaceChanged();
+    } catch (err: any) {
+      const msg = err?.message || '删除任务失败';
+      if (msg.includes('未登录')) {
+        show('登录状态失效，已跳转到登录页面', 'warning');
+      } else {
+        show(msg, 'error');
+      }
+    }
   };
 
   const renameTable = (projectId: string, taskId: string, tableId: string) => {
@@ -311,12 +517,30 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate, onSelectTable, ex
     onSelectTable?.(newId);
   };
 
-  const deleteTable = (projectId: string, taskId: string, tableId: string) => {
-    setProjects(prev => prev.map(p => p.id === projectId ? {
-      ...p,
-      tasks: p.tasks.map(t => t.id === taskId ? { ...t, tables: t.tables.filter(tb => tb.id !== tableId) } : t)
-    } : p));
-    setActiveTableId(prev => (prev === tableId ? null : prev));
+  const deleteTable = async (projectId: string, taskId: string, tableId: string) => {
+    const ok1 = window.confirm('确定要删除该数据表吗？此操作不可撤销。');
+    if (!ok1) return;
+    const ok2 = window.confirm('删除将清理其视图/字段/记录/附件，是否继续？');
+    if (!ok2) return;
+    try {
+      await apiDeleteTable(projectId, tableId);
+      setProjects(prev => prev.map(p => p.id === projectId ? {
+        ...p,
+        tasks: p.tasks.map(t => t.id === taskId ? { ...t, tables: t.tables.filter(tb => tb.id !== tableId) } : t)
+      } : p));
+      setActiveTableId(prev => (prev === tableId ? null : prev));
+      show('数据表已删除并持久化', 'success');
+      notifySpaceChanged();
+    } catch (err: any) {
+      const msg = err?.message || '';
+      if (msg.includes('未登录')) {
+        show('登录状态失效，已跳转到登录页面', 'warning');
+      } else if (msg.includes('后端未提供删除表接口')) {
+        show('后端暂不支持删除表，请更新后端或联系管理员', 'error');
+      } else {
+        show(msg || '删除数据表失败', 'error');
+      }
+    }
   };
 
   // 专业栏：重命名/复制/删除处理函数
@@ -381,18 +605,10 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate, onSelectTable, ex
   return (
     <div style={{ width: 260, minWidth: 260, maxWidth: 260, boxSizing: 'border-box', flex: '0 0 260px', borderRight: `1px solid ${colors.dividerSubtle}`, minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#f5f5f5' }}>
       <div style={{ padding: 12, fontWeight: 700 }}>川庆国际项目运营多维数据表格</div>
-      {/* 主页与空间 */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, color: '#8a8a8a', padding: '8px 12px', textTransform: 'uppercase' }}>
-        <span>主页与空间</span>
-      </div>
-      <div>
-        <Row label={<span>最近编辑</span>} active={active === 'home'} onClick={() => onNavigate('home')} />
-        <Row label={<span>我的空间</span>} active={active === 'space-my'} onClick={() => onNavigate('space-my')} />
-        <Row label={<span>项目空间</span>} active={active === 'space-public'} onClick={() => onNavigate('space-public')} />
-      </div>
+      {/* 移除：主页/我的空间/项目空间/文件管理区块，改由 /home 页面承载 */}
 
-      {/* 项目层级 */}
-      <SectionTitle title="项目" />
+      {/* 项目层级（后端数据） */}
+      <SectionTitle title="我的项目" />
       <div>
         {projects.map((p) => (
           <div key={p.id}>
@@ -441,7 +657,7 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate, onSelectTable, ex
                                   { label: '重命名', onClick: () => renameTable(p.id, t.id, tb.id) },
                                   { label: '重新描述简介', onClick: () => editTableDesc(p.id, t.id, tb.id) },
                                   { label: '复制', onClick: () => duplicateTable(p.id, t.id, tb.id) },
-                                  ...(p.id === 'p-1' && t.id === 't-1' && tb.id === 'tbl-1' ? [] : [{ label: '删除', onClick: () => deleteTable(p.id, t.id, tb.id), danger: true }]),
+                                  ...(p.id === 'p-1' && t.id === 't-1' && tb.id === 'tbl-1' ? [] : [{ label: '删除', onClick: () => deleteTable(tb.projectId ?? p.id, t.id, tb.id), danger: true }]),
                                 ]} />
                               </>
                             )}
@@ -535,6 +751,7 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate, onSelectTable, ex
     <Row label={<span>新建项目</span>} onClick={() => openCompose('project')} />
     <Row label={<span>新建任务</span>} onClick={() => openCompose('task')} />
     <Row label={<span>新建数据表</span>} onClick={() => openCompose('table')} />
+    <Row label={<span>返回我的空间</span>} onClick={() => onNavigate('home')} />
     <Row label={<span>新建收集表</span>} onClick={() => openCompose('collect')} />
     <Row label={<span>新建仪表盘</span>} onClick={() => openCompose('dashboard')} />
     <Row label={<span>新建文件夹</span>} onClick={() => openCompose('folder')} />
@@ -561,7 +778,7 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate, onSelectTable, ex
               style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #ddd' }}
             >
               <option value="">请选择项目</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {myProjects.map(p => <option key={`srv-${p.id}`} value={p.id}>{p.name}</option>)}
             </select>
           </label>
         )}
@@ -571,11 +788,38 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate, onSelectTable, ex
               <span>所属项目</span>
               <select
                 value={composeProjectId ?? ''}
-                onChange={(e) => { const v = e.target.value || null; setComposeProjectId(v); setComposeTaskId(null); }}
+                onChange={async (e) => {
+                  const v = e.target.value || null;
+                  setComposeProjectId(v);
+                  setComposeTaskId(null);
+                  // 先用本地侧边栏树中的任务列表，确保刚创建的任务也可立即选择
+                  if (v) {
+                    const localTasks = (() => {
+                      const prj = projects.find(p => p.id === v);
+                      const list = prj?.tasks || [];
+                      // 过滤“未归属任务”分组
+                      return list.filter(t => !String(t.id).includes('::uncategorized')).map(t => ({ id: t.id, name: t.name }));
+                    })();
+                    setComposeTaskOptions(localTasks);
+                    // 再异步从后端拉取最新任务并合并去重
+                    try {
+                      const remote = await apiListTasks(v);
+                      const mergedMap = new Map<string, { id: string; name: string }>();
+                      [...localTasks, ...remote].forEach(t => mergedMap.set(t.id, t));
+                      setComposeTaskOptions(Array.from(mergedMap.values()));
+                    } catch (err) {
+                      console.warn('加载项目任务失败：', err);
+                      // 保留本地任务列表作为兜底
+                      setComposeTaskOptions(localTasks);
+                    }
+                  } else {
+                    setComposeTaskOptions([]);
+                  }
+                }}
                 style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #ddd' }}
               >
                 <option value="">请选择项目</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {myProjects.map(p => <option key={`srv-${p.id}`} value={p.id}>{p.name}</option>)}
               </select>
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -587,7 +831,7 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate, onSelectTable, ex
                 style={{ padding: '6px 8px', borderRadius: 'var(--radius)', border: '1px solid #ddd' }}
               >
                 <option value="">请选择任务</option>
-                {(projects.find(p => p.id === composeProjectId)?.tasks || []).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                {composeTaskOptions.map(t => <option key={`task-${t.id}`} value={t.id}>{t.name}</option>)}
               </select>
             </label>
           </>
@@ -605,5 +849,3 @@ export const Sidebar: React.FC<Props> = ({ active, onNavigate, onSelectTable, ex
 };
 
 export default Sidebar;
-
-;

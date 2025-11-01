@@ -9,8 +9,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 export class SpaceController {
   constructor(private prisma: PrismaService) {}
 
-  @ApiOperation({ summary: '我的空间：项目/任务/表层级（任务占位）' })
-  @ApiOkResponse({ description: '返回当前用户拥有的项目及其下数据表（任务为空占位）' })
+  @ApiOperation({ summary: '我的空间：项目/任务/表层级' })
+  @ApiOkResponse({ description: '返回当前用户拥有的项目及其下任务与数据表（任务下包含其表，未归属任务的表在顶层）' })
   @UseGuards(JwtAuthGuard)
   @Get('my')
   async mySpace(@Req() req: any) {
@@ -18,32 +18,46 @@ export class SpaceController {
     const projects = await this.prisma.project.findMany({
       where: { ownerId },
       orderBy: { createdAt: 'desc' },
-      include: { tables: { orderBy: { updatedAt: 'desc' } } },
+      include: {
+        tasks: { include: { tables: { orderBy: { updatedAt: 'desc' } } } },
+        tables: { orderBy: { updatedAt: 'desc' } },
+      },
     });
     return {
       projects: projects.map((p) => ({
         project: { id: p.id, name: p.name },
-        tasks: [],
-        tables: p.tables.map((t) => ({ id: t.id, name: t.name, projectId: t.projectId })),
+        tasks: (p.tasks || []).map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          tables: (t.tables || []).map((tb: any) => ({ id: tb.id, name: tb.name, projectId: tb.projectId })),
+        })),
+        tables: (p.tables || []).filter((tb: any) => !tb.taskId).map((t: any) => ({ id: t.id, name: t.name, projectId: t.projectId })),
       })),
     };
   }
 
-  @ApiOperation({ summary: '项目空间：公共视图表（匿名只读开关）' })
-  @ApiOkResponse({ description: '返回允许匿名只读的项目及其允许匿名的表' })
+  @ApiOperation({ summary: '项目空间：公共视图（匿名只读）' })
+  @ApiOkResponse({ description: '返回允许匿名只读的项目及其允许匿名的任务下表与顶层表' })
   @UseGuards(JwtAuthGuard)
   @Get('project')
   async projectSpace() {
     const projects = await this.prisma.project.findMany({
       where: { isAnonymousReadEnabled: true },
       orderBy: { createdAt: 'desc' },
-      include: { tables: { where: { isAnonymousReadEnabled: true }, orderBy: { updatedAt: 'desc' } } },
+      include: {
+        tasks: { include: { tables: { where: { isAnonymousReadEnabled: true }, orderBy: { updatedAt: 'desc' } } } },
+        tables: { where: { isAnonymousReadEnabled: true }, orderBy: { updatedAt: 'desc' } },
+      },
     });
     return {
       projects: projects.map((p) => ({
         project: { id: p.id, name: p.name },
-        tasks: [],
-        tables: p.tables.map((t) => ({ id: t.id, name: t.name, projectId: t.projectId })),
+        tasks: (p.tasks || []).map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          tables: (t.tables || []).map((tb: any) => ({ id: tb.id, name: tb.name, projectId: tb.projectId })),
+        })),
+        tables: (p.tables || []).filter((tb: any) => !tb.taskId).map((t: any) => ({ id: t.id, name: t.name, projectId: t.projectId })),
       })),
     };
   }

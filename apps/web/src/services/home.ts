@@ -1,4 +1,5 @@
-import { API_BASE, authHeaders } from './auth';
+import { API_BASE, authHeaders, logout } from './auth';
+import { navigateTo } from '../router';
 
 export type RecentTable = { id: string; name: string; description?: string };
 
@@ -8,6 +9,11 @@ export async function apiListRecentTables(): Promise<RecentTable[]> {
   });
   if (!resp.ok) {
     const text = await resp.text();
+    if (resp.status === 401) {
+      await logout();
+      navigateTo('/');
+      throw new Error('未登录或登录已过期，已为您跳转到登录页面');
+    }
     throw new Error(text || `获取最近编辑失败(${resp.status})`);
   }
   const data = await resp.json();

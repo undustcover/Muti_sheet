@@ -1,4 +1,4 @@
-import { Controller, Get, Param, UseGuards, Req, ForbiddenException, UseInterceptors, Post, Patch, Body } from '@nestjs/common';
+import { Controller, Get, Param, UseGuards, Req, ForbiddenException, UseInterceptors, Post, Patch, Body, Delete } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags, ApiExtraModels, ApiBody } from '@nestjs/swagger';
 import { ViewConfigDto } from './dto/view-config.dto';
 import { CreateViewDto } from './dto/create-view.dto';
@@ -128,5 +128,32 @@ export class ViewsController {
     if (dto.name != null) data.name = String(dto.name);
     if (dto.config != null) data.config = dto.config as any;
     return this.prisma.view.update({ where: { id: viewId }, data });
+  }
+
+  @ApiOperation({ summary: '删除视图（需登录，编辑者及以上）' })
+  @ApiOkResponse({ description: '删除成功返回视图ID' })
+  @UseGuards(OptionalJwtAuthGuard, ViewAccessGuard)
+  @Delete('views/:viewId')
+  async removeView(
+    @Param('viewId') viewId: string,
+    @Req() req: any,
+  ) {
+    const role = req.user?.role as string | undefined;
+    if (!role || !['OWNER', 'ADMIN', 'EDITOR'].includes(role)) {
+      throw new ForbiddenException('Insufficient permission to delete view');
+    }
+    try {
+      await this.prisma.viewShare.deleteMany({ where: { viewId } });
+    } catch (e) {
+      console.error('ViewsController.removeView deleteMany(viewShare) error:', { viewId, error: e });
+      throw e;
+    }
+    try {
+      await this.prisma.view.delete({ where: { id: viewId } });
+    } catch (e) {
+      console.error('ViewsController.removeView delete(view) error:', { viewId, error: e });
+      throw e;
+    }
+    return { id: viewId };
   }
 }
