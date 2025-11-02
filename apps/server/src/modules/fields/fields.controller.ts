@@ -24,7 +24,21 @@ export class FieldsController {
   @Roles('ADMIN', 'OWNER', 'EDITOR')
   @Post()
   async create(@Param('tableId') tableId: string, @Body() dto: CreateFieldDto) {
-    const field = await this.prisma.field.create({ data: ({ tableId, ...dto } as any) });
+    // 仅映射 Prisma 支持的属性，忽略 DTO 中未持久化字段（如 visible、description）
+    const data: any = {
+      tableId,
+      name: dto.name,
+      type: dto.type,
+      order: dto.order ?? 1,
+    };
+    if (dto.permissionJson) data.permissionJson = dto.permissionJson as any;
+    // 将 options/format/formula 合并进 config JSON
+    const config: any = {};
+    if (dto.options) config.options = dto.options;
+    if (dto.format) config.format = dto.format;
+    if (dto.formula) config.formula = dto.formula;
+    if (Object.keys(config).length > 0) data.config = config;
+    const field = await this.prisma.field.create({ data });
     return field;
   }
 
@@ -70,8 +84,17 @@ export class FieldsController {
   @Roles('ADMIN', 'OWNER', 'EDITOR')
   @Patch('/:fieldId')
   async update(@Param('fieldId') fieldId: string, @Body() dto: UpdateFieldDto) {
-    // 直接透传 DTO 字段，类型以 Prisma 输入为准
-    return this.prisma.field.update({ where: { id: fieldId }, data: dto as any });
+    // 拆分 DTO：基本字段直接更新，options/format/formula 归入 config
+    const { options, format, formula, ...rest } = dto as any;
+    const existing = await this.prisma.field.findUnique({ where: { id: fieldId } });
+    const nextConfig: any = { ...(existing?.config ?? {}) };
+    if (options !== undefined) nextConfig.options = options;
+    if (format !== undefined) nextConfig.format = format;
+    if (formula !== undefined) nextConfig.formula = formula;
+    const data: any = { ...rest };
+    // 仅当有配置键时写入 config，避免清空
+    if (Object.keys(nextConfig).length > 0) data.config = nextConfig;
+    return this.prisma.field.update({ where: { id: fieldId }, data });
   }
 
   @ApiOperation({ summary: '删除字段' })

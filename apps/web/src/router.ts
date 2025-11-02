@@ -1,6 +1,9 @@
 export type Route =
   | { name: 'home' }
-  | { name: 'table'; tableId?: string };
+  | { name: 'table'; tableId?: string }
+  | { name: 'register' }
+  | { name: 'invite'; token?: string }
+  | { name: 'admin' };
 
 export function parseRoute(pathname: string): Route {
   const parts = pathname.split('/').filter(Boolean);
@@ -9,6 +12,9 @@ export function parseRoute(pathname: string): Route {
   if (parts[0] === 'table') {
     return { name: 'table', tableId: parts[1] };
   }
+  if (parts[0] === 'register') return { name: 'register' };
+  if (parts[0] === 'invite') return { name: 'invite', token: parts[1] };
+  if (parts[0] === 'admin') return { name: 'admin' };
   return { name: 'home' };
 }
 

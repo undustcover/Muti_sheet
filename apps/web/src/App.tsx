@@ -594,7 +594,7 @@ export default function App({ initialTableId }: { initialTableId?: string }) {
     fieldOps,
     setColumnColors,
     show,
-    histSetData,
+    histSetData: histSetDataPersist as any,
     requestMeasure,
     openFieldDrawer,
     generateFieldId: () => `field-${Date.now()}`,
@@ -910,7 +910,7 @@ export default function App({ initialTableId }: { initialTableId?: string }) {
           fieldId={editingFieldId}
           availableFields={Object.entries(columnMeta).map(([id, meta]) => ({ id, name: meta.name, type: meta.type }))}
           onClose={closeFieldDrawer}
-          onSave={(payload) => {
+          onSave={async (payload) => {
             const { id, name, type, description, options, formula, format } = payload;
             const exists = !!columnMeta[id];
             if (exists) {
@@ -921,13 +921,77 @@ export default function App({ initialTableId }: { initialTableId?: string }) {
               if (description !== undefined) {
                 histSetColumnMeta(prev => ({ ...prev, [id]: { ...prev[id], description } }));
               }
-            } else {
-              fieldOps.addField(id, { id, name, type });
-              if (description !== undefined) {
-                histSetColumnMeta(prev => ({ ...prev, [id]: { ...prev[id], description } }));
+              try {
+                const { apiUpdateField } = await import('./services/fields');
+                const backendTypeMap: Record<string, 'TEXT' | 'NUMBER' | 'DATE' | 'ATTACHMENT' | 'FORMULA' | 'SINGLE_SELECT' | 'MULTI_SELECT' | undefined> = {
+                  text: 'TEXT',
+                  number: 'NUMBER',
+                  date: 'DATE',
+                  single: 'SINGLE_SELECT',
+                  singleSelect: 'SINGLE_SELECT',
+                  multi: 'MULTI_SELECT',
+                  attachment: 'ATTACHMENT',
+                  formula: 'FORMULA',
+                } as any;
+                const backendType = backendTypeMap[type];
+                const patch: any = { name: name.trim() };
+                if (backendType) patch.type = backendType;
+                if (options) patch.options = options;
+                if (format) patch.format = format;
+                if (formula) patch.formula = formula;
+                await apiUpdateField(id, patch);
+                show('字段已更新并持久化', 'success');
+              } catch (err: any) {
+                console.warn('更新字段持久化失败：', err);
+                show(err?.message || '更新字段失败（已本地更新）', 'warning');
               }
-              if (type === 'single' || type === 'multi' || type === 'number' || type === 'formula') {
-                fieldOps.changeType(id, type as any, { options, formula, format });
+            } else {
+              try {
+                const { apiCreateField } = await import('./services/fields');
+                const backendTypeMap: Record<string, 'TEXT' | 'NUMBER' | 'DATE' | 'ATTACHMENT' | 'FORMULA' | 'SINGLE_SELECT' | 'MULTI_SELECT' | undefined> = {
+                  text: 'TEXT',
+                  number: 'NUMBER',
+                  date: 'DATE',
+                  single: 'SINGLE_SELECT',
+                  singleSelect: 'SINGLE_SELECT',
+                  multi: 'MULTI_SELECT',
+                  attachment: 'ATTACHMENT',
+                  formula: 'FORMULA',
+                } as any;
+                const backendType = backendTypeMap[type];
+                if (!backendType) {
+                  // 暂不支持的类型：仅本地添加
+                  fieldOps.addField(id, { id, name, type });
+                  if (description !== undefined) {
+                    histSetColumnMeta(prev => ({ ...prev, [id]: { ...prev[id], description } }));
+                  }
+                  show('该字段类型暂未持久化，已仅本地添加', 'warning');
+                  closeFieldDrawer();
+                  return;
+                }
+                const created = await trackSave(apiCreateField(activeTableId!, {
+                  name: name.trim(),
+                  type: backendType,
+                  order: (columnOrder?.length ?? 0) + 1,
+                  visible: true,
+                  options,
+                  format,
+                  formula,
+                }));
+                const backendId = (created as any)?.id ?? id;
+                fieldOps.addField(backendId, { id: backendId, name, type, options, formula, format });
+                if (description !== undefined) {
+                  histSetColumnMeta(prev => ({ ...prev, [backendId]: { ...prev[backendId], description } }));
+                }
+                show('字段已创建并持久化', 'success');
+              } catch (err: any) {
+                console.warn('创建字段持久化失败：', err);
+                // 后端创建失败：退化为本地添加，避免打断使用
+                fieldOps.addField(id, { id, name, type });
+                if (description !== undefined) {
+                  histSetColumnMeta(prev => ({ ...prev, [id]: { ...prev[id], description } }));
+                }
+                show(err?.message || '创建字段失败（已本地添加）', 'warning');
               }
             }
             closeFieldDrawer();

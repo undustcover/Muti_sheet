@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { login as authLogin } from '../services/auth';
+import { useEffect, useState } from 'react';
+import { login as authLogin, getRegistrationMode } from '../services/auth';
+import { navigateTo } from '../router';
 
 type Props = { onSuccess?: () => void };
 
@@ -8,6 +9,16 @@ export default function Login({ onSuccess }: Props) {
   const [password, setPassword] = useState('admin123');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [inviteOnly, setInviteOnly] = useState<boolean>(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const mode = await getRegistrationMode();
+        setInviteOnly(!!mode.inviteOnly);
+      } catch {}
+    })();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,6 +48,16 @@ export default function Login({ onSuccess }: Props) {
         <button type="submit" disabled={loading} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: 'none', background: '#2d7ef7', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>
           {loading ? '登录中...' : '登录'}
         </button>
+        {!inviteOnly && (
+          <div style={{ marginTop: 12, textAlign: 'center' }}>
+            <button type="button" onClick={() => navigateTo('/register')} style={{ background: 'transparent', border: 'none', color: '#2d7ef7', cursor: 'pointer' }}>没有账号？去注册</button>
+          </div>
+        )}
+        {inviteOnly && (
+          <div style={{ marginTop: 12, textAlign: 'center', color: '#666' }}>
+            当前仅支持邀请注册，请使用管理员提供的邀请链接
+          </div>
+        )}
       </form>
     </div>
   );

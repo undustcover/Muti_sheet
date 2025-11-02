@@ -138,7 +138,17 @@ export function useTableState(params: UseTableStateParams) {
           setTables(prev => {
             const id = activeTableId in prev ? activeTableId : initialTableId;
             const curr = prev[id];
-            const nextMeta = Object.fromEntries(fields.map((f) => [f.id, { name: f.name, type: mapBackendTypeToUI(f.type) }]));
+            const nextMeta = Object.fromEntries(fields.map((f: any) => [
+              f.id,
+              {
+                name: f.name,
+                type: mapBackendTypeToUI(f.type as any),
+                // 将后端 config 映射到前端列元数据
+                options: f?.config?.options ?? undefined,
+                formula: f?.config?.formula ?? undefined,
+                format: f?.config?.format ?? undefined,
+              },
+            ]));
             const nextOrder = fields.map(f => f.id);
             return { ...prev, [id]: { ...curr, columnMeta: nextMeta as any, columnOrder: nextOrder } };
           });
@@ -153,7 +163,16 @@ export function useTableState(params: UseTableStateParams) {
               setTables(prev => {
                 const id = activeTableId in prev ? activeTableId : initialTableId;
                 const curr = prev[id];
-                const nextMeta = Object.fromEntries(fields.map((f) => [f.id, { name: f.name, type: mapBackendTypeToUI(f.type) }]));
+                const nextMeta = Object.fromEntries(fields.map((f: any) => [
+                  f.id,
+                  {
+                    name: f.name,
+                    type: mapBackendTypeToUI(f.type as any),
+                    options: f?.config?.options ?? undefined,
+                    formula: f?.config?.formula ?? undefined,
+                    format: f?.config?.format ?? undefined,
+                  },
+                ]));
                 const nextOrder = fields.map(f => f.id);
                 return { ...prev, [id]: { ...curr, columnMeta: nextMeta as any, columnOrder: nextOrder } };
               });

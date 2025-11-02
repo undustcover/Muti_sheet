@@ -20,6 +20,8 @@ enum FieldType {
   DATE
   ATTACHMENT
   FORMULA
+  SINGLE_SELECT
+  MULTI_SELECT
 }
 
 model User {
@@ -36,6 +38,7 @@ model User {
   auditLogs AuditLog[]
   viewShares ViewShare[]
   tablesCreated Table[] @relation("UserCreatedTables")
+  invites   Invite[]
 }
 
 model Project {
@@ -99,6 +102,7 @@ model Field {
   type      FieldType
   order     Int
   permissionJson Json?
+  config    Json?
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
@@ -194,4 +198,27 @@ model Attachment {
 
   @@index([tableId])
   @@index([recordId])
+}
+
+// 邀请注册：一次性邀请链接，按名字唯一（未使用的邀请禁止重名）
+model Invite {
+  id          String   @id @default(uuid())
+  name        String
+  token       String   @unique
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  usedAt      DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+
+  @@index([name])
+}
+
+// 全局系统设置：仅包含注册模式（是否仅邀请注册）
+model SystemSetting {
+  id                     String   @id @default(uuid())
+  inviteOnlyRegistration Boolean  @default(false)
+  createdAt              DateTime @default(now()) @db.Timestamptz
+  updatedAt              DateTime @updatedAt @db.Timestamptz
 }

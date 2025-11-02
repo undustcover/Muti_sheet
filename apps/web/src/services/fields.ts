@@ -1,7 +1,8 @@
 import { API_BASE, authHeaders, logout } from './auth';
 import { navigateTo } from '../router';
 
-export type FieldItem = { id: string; name: string; type?: 'TEXT' | 'NUMBER' | 'DATE'; description?: string; visible?: boolean; order?: number };
+export type BackendFieldType = 'TEXT' | 'NUMBER' | 'DATE' | 'ATTACHMENT' | 'FORMULA' | 'SINGLE_SELECT' | 'MULTI_SELECT';
+export type FieldItem = { id: string; name: string; type?: BackendFieldType; description?: string; visible?: boolean; order?: number; config?: any };
 
 // 统一处理 401：登出并跳回登录页
 async function ensureOk(resp: Response, fallbackMsg: string) {
@@ -27,7 +28,10 @@ export async function apiListFields(tableId: string): Promise<FieldItem[]> {
 }
 
 // 新增字段
-export async function apiCreateField(tableId: string, payload: { name: string; type: 'TEXT' | 'NUMBER' | 'DATE'; description?: string; visible?: boolean; order?: number }): Promise<FieldItem> {
+export async function apiCreateField(
+  tableId: string,
+  payload: { name: string; type: BackendFieldType; description?: string; visible?: boolean; order?: number; options?: any[]; format?: any; formula?: any }
+): Promise<FieldItem> {
   const resp = await fetch(`${API_BASE}/tables/${tableId}/fields`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -38,7 +42,10 @@ export async function apiCreateField(tableId: string, payload: { name: string; t
 }
 
 // 更新字段
-export async function apiUpdateField(fieldId: string, payload: Partial<{ name: string; type: 'TEXT' | 'NUMBER' | 'DATE'; description: string; visible: boolean; order: number }>): Promise<FieldItem> {
+export async function apiUpdateField(
+  fieldId: string,
+  payload: Partial<{ name: string; type: BackendFieldType; description: string; visible: boolean; order: number; options: any[]; format: any; formula: any }>
+): Promise<FieldItem> {
   const resp = await fetch(`${API_BASE}/tables/unused/fields/${fieldId}`.replace('/tables/unused', ''), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -59,8 +66,12 @@ export async function apiDeleteField(fieldId: string): Promise<FieldItem> {
 }
 
 // 类型映射：后端 -> 前端
-export function mapBackendTypeToUI(t?: 'TEXT' | 'NUMBER' | 'DATE'): 'text' | 'number' | 'date' {
+export function mapBackendTypeToUI(t?: BackendFieldType): 'text' | 'number' | 'date' | 'single' | 'multi' | 'attachment' | 'formula' {
   if (t === 'NUMBER') return 'number';
   if (t === 'DATE') return 'date';
+  if (t === 'SINGLE_SELECT') return 'single';
+  if (t === 'MULTI_SELECT') return 'multi';
+  if (t === 'ATTACHMENT') return 'attachment';
+  if (t === 'FORMULA') return 'formula';
   return 'text';
 }

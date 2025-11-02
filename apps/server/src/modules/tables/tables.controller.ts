@@ -28,10 +28,24 @@ export class TablesController {
       if (!task) throw new BadRequestException('任务不存在');
       if (task.projectId !== projectId) throw new ForbiddenException('任务不属于该项目');
     }
-    const table = await this.prisma.table.create({
-      data: { name: dto.name, projectId, taskId: dto.taskId, isAnonymousReadEnabled: dto.isAnonymousReadEnabled ?? false, creatorId: req.user?.userId },
+    // 在事务中创建表与默认字段（序号/文本/时间）
+    const result = await this.prisma.$transaction(async (tx) => {
+      const table = await tx.table.create({
+        data: {
+          name: dto.name,
+          projectId,
+          taskId: dto.taskId,
+          isAnonymousReadEnabled: dto.isAnonymousReadEnabled ?? false,
+          creatorId: req.user?.userId,
+        },
+      });
+      // 默认字段：序号(NUMBER)、文本(TEXT)、时间(DATE)
+      await tx.field.create({ data: { tableId: table.id, name: '序号', type: 'NUMBER', order: 1 } });
+      await tx.field.create({ data: { tableId: table.id, name: '文本', type: 'TEXT', order: 2 } });
+      await tx.field.create({ data: { tableId: table.id, name: '时间', type: 'DATE', order: 3 } });
+      return table;
     });
-    return table;
+    return result;
   }
 
   @ApiOperation({ summary: '列出表（只读，支持匿名）' })

@@ -4,6 +4,9 @@ import App from '../App';
 import { authBootstrap, getUser, getToken, logout } from '../services/auth';
 import HomePage from '../pages/HomePage';
 import { parseRoute, navigateTo, type Route } from '../router';
+import RegisterPage from '../pages/RegisterPage';
+import InviteRegisterPage from '../pages/InviteRegisterPage';
+import AdminPage from '../pages/AdminPage';
 
 export default function AppShell() {
   const [ready, setReady] = useState(false);
@@ -51,6 +54,8 @@ export default function AppShell() {
   }
 
   if (!authed) {
+    if (route.name === 'register') return <RegisterPage />;
+    if (route.name === 'invite') return <InviteRegisterPage token={route.token} />;
     return <Login onSuccess={() => {
       setAuthed(true);
       if (window.location.pathname === '/' || window.location.pathname === '') {
@@ -73,6 +78,8 @@ export default function AppShell() {
     page = <HomePage onOpenTable={(id) => navigateTo(id ? `/table/${id}` : '/table')} />;
   } else if (route.name === 'table') {
     page = <App initialTableId={route.tableId} />;
+  } else if (route.name === 'admin') {
+    page = <AdminPage />;
   } else {
     page = <HomePage onOpenTable={(id) => navigateTo(id ? `/table/${id}` : '/table')} />;
   }

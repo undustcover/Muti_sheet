@@ -103,12 +103,43 @@ export class RecordsController {
     ]);
 
     const projectAnonymous = anonymous;
+    const fieldMap = new Map(fields.map((f: any) => [f.id, f]));
     const result = items.map((rec) => {
       const obj: any = { id: rec.id, createdAt: rec.createdAt };
+      // 先填充原始值
       for (const d of rec.data) {
         if (!visibleFieldIds.includes(d.fieldId)) continue;
         const v = d.valueJson ?? d.valueText ?? d.valueNumber ?? d.valueDate ?? null;
         obj[d.fieldId] = projectAnonymous ? (typeof v === 'object' ? null : v) : v;
+      }
+      // 计算公式字段
+      for (const f of fields) {
+        if (!visibleFieldIds.includes(f.id)) continue;
+        if (f.type === 'FORMULA' && (f as any).config?.formula) {
+          const cfg = (f as any).config.formula as { op: string; fields: string[] };
+          const values: number[] = (cfg.fields || []).map((fid) => {
+            // 从 rec.data 中取值（优先 number，再 text 可解析）
+            const d = rec.data.find((x) => x.fieldId === fid);
+            if (!d) return 0;
+            if (typeof d.valueNumber === 'number') return d.valueNumber;
+            const t = d.valueText;
+            const n = typeof t === 'string' ? Number(t) : undefined;
+            return typeof n === 'number' && !Number.isNaN(n) ? n : 0;
+          });
+          let computed: number | null = null;
+          switch ((cfg.op || 'add').toLowerCase()) {
+            case 'add': computed = values.reduce((a, b) => a + b, 0); break;
+            case 'sub': computed = values.reduce((a, b) => a - b, 0); break;
+            case 'mul': computed = values.reduce((a, b) => a * b, values.length ? 1 : 0); break;
+            case 'div': computed = values.reduce((a, b) => (b === 0 ? a : a / b), values.length ? values[0] : 0); break;
+            case 'sum': computed = values.reduce((a, b) => a + b, 0); break;
+            case 'avg': computed = values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0; break;
+            case 'max': computed = values.length ? Math.max(...values) : 0; break;
+            case 'min': computed = values.length ? Math.min(...values) : 0; break;
+            default: computed = values.reduce((a, b) => a + b, 0); break;
+          }
+          obj[f.id] = computed;
+        }
       }
       return obj;
     });
@@ -187,7 +218,9 @@ export class RecordsController {
               case 'TEXT': payload.valueText = String(val ?? ''); break;
               case 'NUMBER': payload.valueNumber = val === null || val === undefined ? null : Number(val); break;
               case 'DATE': payload.valueDate = val ? new Date(val) : null; break;
-              default: payload.valueJson = val ?? null; break;
+            case 'SINGLE_SELECT': payload.valueJson = val ?? null; break;
+            case 'MULTI_SELECT': payload.valueJson = Array.isArray(val) ? val : val === null || val === undefined ? null : [val]; break;
+            default: payload.valueJson = val ?? null; break;
             }
             return payload;
           });
@@ -206,12 +239,14 @@ export class RecordsController {
             case 'TEXT': payload.valueText = String(val ?? ''); payload.valueJson = null; payload.valueNumber = null; payload.valueDate = null; break;
             case 'NUMBER': payload.valueNumber = val === null || val === undefined ? null : Number(val); payload.valueText = null; payload.valueJson = null; payload.valueDate = null; break;
             case 'DATE': payload.valueDate = val ? new Date(val) : null; payload.valueText = null; payload.valueJson = null; payload.valueNumber = null; break;
-            default: payload.valueJson = val ?? null; payload.valueText = null; payload.valueNumber = null; payload.valueDate = null; break;
-          }
-          await tx.recordsData.upsert({
-            where: { recordId_fieldId: { recordId, fieldId: fid } },
-            create: payload,
-            update: payload,
+          case 'SINGLE_SELECT': payload.valueJson = val ?? null; payload.valueText = null; payload.valueNumber = null; payload.valueDate = null; break;
+          case 'MULTI_SELECT': payload.valueJson = Array.isArray(val) ? val : val === null || val === undefined ? null : [val]; payload.valueText = null; payload.valueNumber = null; payload.valueDate = null; break;
+          default: payload.valueJson = val ?? null; payload.valueText = null; payload.valueNumber = null; payload.valueDate = null; break;
+        }
+        await tx.recordsData.upsert({
+          where: { recordId_fieldId: { recordId, fieldId: fid } },
+          create: payload,
+          update: payload,
           });
         }
         result.updated.push(recordId);

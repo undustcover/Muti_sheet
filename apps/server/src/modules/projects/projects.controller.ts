@@ -54,9 +54,12 @@ export class ProjectsController {
       // 找到项目下任务
       const tasks = await tx.task.findMany({ where: { projectId }, select: { id: true } });
       const taskIds = tasks.map((t) => t.id);
-      // 找到任务下的表
-      const tables = await tx.table.findMany({ where: { taskId: { in: taskIds } }, select: { id: true } });
-      const tableIds = tables.map((t) => t.id);
+      // 找到任务下的表 + 项目顶层未归属任务的表
+      const tablesUnderTasks = taskIds.length
+        ? await tx.table.findMany({ where: { taskId: { in: taskIds } }, select: { id: true } })
+        : [];
+      const topLevelTables = await tx.table.findMany({ where: { projectId, taskId: null }, select: { id: true } });
+      const tableIds = [...tablesUnderTasks, ...topLevelTables].map((t) => t.id);
       if (tableIds.length) {
         // 删除视图及共享
         const views = await tx.view.findMany({ where: { tableId: { in: tableIds } }, select: { id: true } });

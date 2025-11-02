@@ -110,3 +110,54 @@ export function notifyAuthChanged() {
     window.dispatchEvent(new CustomEvent('auth:changed'));
   } catch {}
 }
+
+export async function getRegistrationMode(): Promise<{ inviteOnly: boolean }> {
+  const resp = await fetch(`${API_BASE}/auth/registration-mode`);
+  if (!resp.ok) throw new Error('获取注册模式失败');
+  return resp.json();
+}
+
+export async function register(email: string, name: string, password: string) {
+  const resp = await fetch(`${API_BASE}/auth/register`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, name, password }),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(text || `注册失败(${resp.status})`);
+  }
+  const data = await resp.json();
+  const token = data?.access_token || data?.token || data?.accessToken || '';
+  const user: AuthUser | null = data?.user || null;
+  if (token) setToken(token);
+  if (user) setUser(user);
+  notifyAuthChanged();
+  return { token, user };
+}
+
+export async function inviteValidate(token: string): Promise<{ name: string }> {
+  const resp = await fetch(`${API_BASE}/auth/invite/validate?token=${encodeURIComponent(token)}`);
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(text || `邀请校验失败(${resp.status})`);
+  }
+  return resp.json();
+}
+
+export async function inviteRegister(token: string, email: string, password: string) {
+  const resp = await fetch(`${API_BASE}/auth/invite/register`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, email, password }),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(text || `邀请注册失败(${resp.status})`);
+  }
+  const data = await resp.json();
+  const tokenJwt = data?.access_token || data?.token || data?.accessToken || '';
+  const user: AuthUser | null = data?.user || null;
+  if (tokenJwt) setToken(tokenJwt);
+  if (user) setUser(user);
+  notifyAuthChanged();
+  return { token: tokenJwt, user };
+}
