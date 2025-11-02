@@ -16,7 +16,16 @@ export async function apiCreateProject(name: string, isAnonymousReadEnabled?: bo
     }
     throw new Error(text || `创建项目失败(${resp.status})`);
   }
-  return resp.json();
+  const json = await resp.json().catch(() => undefined);
+  const id = (json?.id ?? json?.project?.id) as string | undefined;
+  const pname = (json?.name ?? json?.project?.name ?? name) as string | undefined;
+  if (!id) {
+    try {
+      console.warn('[apiCreateProject] ok but missing id', { status: resp.status, body: json });
+    } catch {}
+    throw new Error('后端未返回有效的项目ID');
+  }
+  return { id, name: pname || name };
 }
 
 export async function apiDeleteProject(projectId: string): Promise<{ id: string }> {

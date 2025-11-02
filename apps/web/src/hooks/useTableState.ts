@@ -131,6 +131,11 @@ export function useTableState(params: UseTableStateParams) {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
+      // 本地示例表（如 "tbl-1" 或 "tbl-import-<timestamp>") 不应访问后端。
+      // 这些 ID 以 "tbl-" 开头，属于前端临时数据，直接跳过后端自举与拉取逻辑。
+      if (activeTableId.startsWith('tbl-')) {
+        return;
+      }
       try {
         // 先拉取字段列表，若为空则进行“空表自举”：创建序号/文本/时间三字段
         let fields = await apiListFields(activeTableId);
@@ -199,14 +204,17 @@ export function useTableState(params: UseTableStateParams) {
             const seqId = nameToId.get('序号');
             const textId = nameToId.get('文本');
             const timeId = nameToId.get('时间');
-            const createPayload = Array.from({ length: 15 }).map((_, i) => ({
-              data: {
-                ...(seqId ? { [seqId]: i + 1 } : {}),
-                ...(textId ? { [textId]: '' } : {}),
-                ...(timeId ? { [timeId]: null } : {}),
-              },
-            }));
-            await apiBatchRecords(activeTableId, { create: createPayload });
+            const isDefaultSchema = Array.isArray(fields) && fields.length === 3 && seqId && textId && timeId;
+            if (isDefaultSchema) {
+              const createPayload = Array.from({ length: 15 }).map((_, i) => ({
+                data: {
+                  [seqId as string]: i + 1,
+                  [textId as string]: '',
+                  [timeId as string]: null,
+                },
+              }));
+              await apiBatchRecords(activeTableId, { create: createPayload });
+            }
           } catch {}
           if (!cancelled) {
             list = await apiListRecords(activeTableId, { page: 1, pageSize: 200 });

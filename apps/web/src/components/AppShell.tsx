@@ -77,7 +77,12 @@ export default function AppShell() {
   if (route.name === 'home') {
     page = <HomePage onOpenTable={(id) => navigateTo(id ? `/table/${id}` : '/table')} />;
   } else if (route.name === 'table') {
-    page = <App initialTableId={route.tableId} />;
+    if (!route.tableId) {
+      navigateTo('/home');
+      page = <HomePage onOpenTable={(id) => navigateTo(id ? `/table/${id}` : '/table')} />;
+    } else {
+      page = <App initialTableId={route.tableId} />;
+    }
   } else if (route.name === 'admin') {
     page = <AdminPage />;
   } else {

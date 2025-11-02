@@ -16,4 +16,9 @@ export class CreateTableDto {
   @IsOptional()
   @IsString()
   taskId?: string;
+
+  @ApiPropertyOptional({ example: true, description: '可选：跳过默认字段创建（用于导入场景）' })
+  @IsOptional()
+  @IsBoolean()
+  skipDefaultFields?: boolean;
 }

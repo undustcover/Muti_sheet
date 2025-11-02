@@ -27,7 +27,14 @@ export async function apiCreateTask(projectId: string, name: string, description
     }
     throw new Error(text || `创建任务失败(${resp.status})`);
   }
-  return resp.json();
+  const json = await resp.json().catch(() => undefined);
+  const id = (json?.id ?? json?.task?.id) as string | undefined;
+  const tname = (json?.name ?? json?.task?.name ?? name) as string | undefined;
+  if (!id) {
+    try { console.warn('[apiCreateTask] ok but missing id', { url, projectId, body: json }); } catch {}
+    throw new Error('后端未返回有效的任务ID');
+  }
+  return { id, name: tname || name, projectId, description };
 }
 
 export async function apiListTasks(projectId: string): Promise<Array<{ id: string; name: string }>> {

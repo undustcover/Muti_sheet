@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards, Req, ForbiddenException, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards, Req, ForbiddenException, BadRequestException, UseInterceptors } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateFieldDto } from './dto/create-field.dto';
@@ -38,8 +38,19 @@ export class FieldsController {
     if (dto.format) config.format = dto.format;
     if (dto.formula) config.formula = dto.formula;
     if (Object.keys(config).length > 0) data.config = config;
-    const field = await this.prisma.field.create({ data });
-    return field;
+    try {
+      const field = await this.prisma.field.create({ data });
+      return field;
+    } catch (err: any) {
+      const code = err?.code as string | undefined;
+      if (code === 'P2003') {
+        throw new BadRequestException('所属表不存在，无法创建字段');
+      }
+      if (code === 'P2002') {
+        throw new BadRequestException('字段唯一性冲突（可能为顺序或名称重复）');
+      }
+      throw err;
+    }
   }
 
   @ApiOperation({ summary: '列出字段（只读，支持匿名；匿名按表开关与字段权限过滤）' })

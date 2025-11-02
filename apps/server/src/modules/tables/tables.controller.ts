@@ -35,7 +35,7 @@ export class TablesController {
       if (!task) throw new BadRequestException('任务不存在');
       if (task.projectId !== projectId) throw new ForbiddenException('任务不属于该项目');
     }
-    // 在事务中创建表与默认字段（序号/文本/时间）
+    // 在事务中创建表；根据请求选择性创建默认字段（序号/文本/时间）
     const result = await this.prisma.$transaction(async (tx) => {
       const table = await tx.table.create({
         data: {
@@ -47,9 +47,11 @@ export class TablesController {
         },
       });
       // 默认字段：序号(NUMBER)、文本(TEXT)、时间(DATE)
-      await tx.field.create({ data: { tableId: table.id, name: '序号', type: 'NUMBER', order: 1 } });
-      await tx.field.create({ data: { tableId: table.id, name: '文本', type: 'TEXT', order: 2 } });
-      await tx.field.create({ data: { tableId: table.id, name: '时间', type: 'DATE', order: 3 } });
+      if (!dto?.skipDefaultFields) {
+        await tx.field.create({ data: { tableId: table.id, name: '序号', type: 'NUMBER', order: 1 } });
+        await tx.field.create({ data: { tableId: table.id, name: '文本', type: 'TEXT', order: 2 } });
+        await tx.field.create({ data: { tableId: table.id, name: '时间', type: 'DATE', order: 3 } });
+      }
       return table;
     });
     return result;

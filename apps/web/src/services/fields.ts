@@ -38,7 +38,15 @@ export async function apiCreateField(
     body: JSON.stringify(payload),
   });
   await ensureOk(resp, '创建字段失败');
-  return resp.json();
+  const json = await resp.json().catch(() => undefined);
+  const id = (json?.id ?? json?.field?.id) as string | undefined;
+  const name = (json?.name ?? json?.field?.name ?? payload.name) as string | undefined;
+  const type = (json?.type ?? json?.field?.type ?? payload.type) as BackendFieldType | undefined;
+  if (!id) {
+    try { console.warn('[apiCreateField] ok but missing id', { tableId, payload, body: json }); } catch {}
+    throw new Error('后端未返回有效的字段ID');
+  }
+  return { id, name: name || payload.name, type, description: json?.description, visible: json?.visible, order: json?.order, config: json?.config } as FieldItem;
 }
 
 // 更新字段

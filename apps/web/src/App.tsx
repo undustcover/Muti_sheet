@@ -183,9 +183,8 @@ export default function App({ initialTableId }: { initialTableId?: string }) {
 
     // 先处理创建：需要拿回后端生成的 ID 并更新本地行 ID，避免后续更新/删除错位
     let nextApplied = next.slice();
-    const isLocalTableId = !!activeTableId && activeTableId.startsWith('tbl-');
     const createdIdMap: Record<string, string> = {};
-    if (createRows.length > 0 && activeTableId && !isLocalTableId) {
+    if (createRows.length > 0 && activeTableId) {
       for (let i = 0; i < nextApplied.length; i++) {
         const row = nextApplied[i];
         const isNew = !prevMap.has(row.id);
@@ -211,8 +210,8 @@ export default function App({ initialTableId }: { initialTableId?: string }) {
     // 本地立即更新，保证交互流畅
     setData(nextApplied);
 
-    // 后台更新与删除：真实后端表直接写回；本地示例表不写回
-    if (activeTableId && !isLocalTableId) {
+    // 后台更新与删除：真实后端表直接写回
+    if (activeTableId) {
       try {
         const { apiBatchRecords, apiUpdateRecord } = await import('./services/records');
         // 将刚创建的临时ID映射为后端真实ID；新建的记录不需要再做更新
@@ -440,8 +439,19 @@ export default function App({ initialTableId }: { initialTableId?: string }) {
   const onImport = ({ fileName, sheetName, header, rows }: { fileName: string; sheetName: string; header: any[]; rows: any[][] }) => {
     const importedTableName = fileName || '导入数据表';
 
-    // 生成列ID与名称
-    const colInfo = header.map((name: any, idx: number) => ({ id: `col_${idx + 1}`, name: String(name ?? `列${idx + 1}`) }));
+    // 生成列ID与名称（清洗空白、去重）
+    const usedNames = new Set<string>();
+    const colInfo = header.map((raw: any, idx: number) => {
+      const trimmed = String(raw ?? '').trim();
+      let base = trimmed || `列${idx + 1}`;
+      let final = base;
+      let seq = 2;
+      while (usedNames.has(final)) {
+        final = `${base}_${seq++}`;
+      }
+      usedNames.add(final);
+      return { id: `col_${idx + 1}`, name: final };
+    });
     // 推断列类型
     const inferType = (values: any[]): 'text' | 'number' | 'date' => {
       const samples = values.filter(v => v !== null && v !== undefined && String(v).trim() !== '').slice(0, 24);
@@ -466,7 +476,7 @@ export default function App({ initialTableId }: { initialTableId?: string }) {
         const t = nextMeta[c.id].type;
         if (t === 'number') {
           const n = Number(val);
-          obj[c.id] = Number.isFinite(n) ? n : 0;
+          obj[c.id] = Number.isFinite(n) ? n : null;
         } else if (t === 'date') {
           const d = dayjs(String(val));
           obj[c.id] = d.isValid() ? d.toISOString() : '';
@@ -486,8 +496,11 @@ export default function App({ initialTableId }: { initialTableId?: string }) {
 
         if (!projectId) {
           const { apiCreateProject } = await import('./services/projects');
-          const project = await trackSave(apiCreateProject('导入项目'));
-          projectId = project.id;
+          const createdProject = await trackSave(apiCreateProject('导入项目'));
+          if (!createdProject || !createdProject.id) {
+            throw new Error('创建项目失败（未返回有效ID）');
+          }
+          projectId = createdProject.id;
         }
 
         let taskId: string | undefined = undefined;
@@ -498,53 +511,87 @@ export default function App({ initialTableId }: { initialTableId?: string }) {
         } catch {}
         if (!taskId) {
           const { apiCreateTask } = await import('./services/tasks');
-          const task = await trackSave(apiCreateTask(projectId!, '导入任务'));
-          taskId = task.id;
+          const createdTask = await trackSave(apiCreateTask(projectId!, '导入任务'));
+          if (!createdTask || !createdTask.id) {
+            throw new Error('创建任务失败（未返回有效ID）');
+          }
+          taskId = createdTask.id;
         }
 
         const { apiCreateTable } = await import('./services/tables');
-        const table = await trackSave(apiCreateTable(projectId!, importedTableName, undefined, taskId));
+        const createdTable = await trackSave(apiCreateTable(projectId!, importedTableName, undefined, taskId, true));
+        if (!createdTable || !createdTable.id) {
+          throw new Error('创建数据表失败（未返回ID）');
+        }
+        const table = createdTable;
 
-        // 创建字段
+        // 创建字段并收集后端字段ID（逐列捕获错误，避免整体失败）
         const { apiCreateField } = await import('./services/fields');
         const typeMap: Record<string, 'TEXT' | 'NUMBER' | 'DATE'> = { text: 'TEXT', number: 'NUMBER', date: 'DATE' };
+        const createdFields: Array<{ fid: string; cid: string }> = [];
         for (let i = 0; i < colInfo.length; i++) {
           const col = colInfo[i];
           const backendType = typeMap[nextMeta[col.id].type] || 'TEXT';
-          await trackSave(apiCreateField(table.id, { name: col.name, type: backendType, order: i + 1, visible: true }));
+          try {
+            const created = await trackSave(apiCreateField(table.id, { name: col.name, type: backendType, order: i + 1, visible: true }));
+            if (created?.id) {
+              createdFields.push({ fid: created.id, cid: col.id });
+            } else {
+              show(`创建字段失败（未返回ID）：${col.name}`, 'warning');
+            }
+          } catch (err: any) {
+            console.warn('创建字段失败：', { column: col.name, error: err });
+            show(`创建字段失败：${col.name}（${err?.message || '未知错误'}）`, 'error');
+          }
+        }
+        if (createdFields.length === 0) {
+          throw new Error('后端未成功创建任何字段');
         }
 
         // 批量创建记录
         const { apiBatchRecords } = await import('./services/records');
-        const createPayload = nextData.map((row) => {
+        // 为适配后端默认按创建时间倒序返回，反向写入以保持与 Excel 显示一致
+        const createPayload = [...nextData].reverse().map((row) => {
           const data: Record<string, any> = {};
-          for (const key of Object.keys(row)) {
-            if (key === 'id') continue;
-            data[key] = (row as any)[key];
+          for (const pair of createdFields) {
+            data[pair.fid] = (row as any)[pair.cid];
           }
           return { data };
         });
+        let createdIds: string[] = [];
         if (createPayload.length > 0) {
-          await trackSave(apiBatchRecords(table.id, { create: createPayload }));
+          const batchResp = await trackSave(apiBatchRecords(table.id, { create: createPayload }));
+          createdIds = Array.isArray((batchResp as any)?.created) ? (batchResp as any).created : [];
         }
 
-        // 切换到后端表，并通知空间刷新
+        // 构建本地即时可见的列与数据（使用后端字段ID与记录ID）
+        const uiTypeMap: Record<string, 'text' | 'number' | 'date'> = { TEXT: 'text', NUMBER: 'number', DATE: 'date' } as any;
+        const localMeta: Record<string, { name: string; type: string }> = {};
+        const localOrder: string[] = [];
+        for (let i = 0; i < createdFields.length; i++) {
+          const { fid, cid } = createdFields[i];
+          localMeta[fid] = { name: nextMeta[cid].name, type: nextMeta[cid].type };
+          localOrder.push(fid);
+        }
+        // 将后端返回的 createdIds 反向以匹配原始 nextData 顺序
+        const createdIdsInOriginalOrder = [...createdIds].reverse();
+        const localRows = nextData.map((row, i) => {
+          const id = createdIdsInOriginalOrder[i] || `rec-${i + 1}-${Date.now()}`;
+          const obj: any = { id };
+          for (const pair of createdFields) {
+            obj[pair.fid] = (row as any)[pair.cid];
+          }
+          return obj as any;
+        });
+        // 立即在前端表状态中填入结构与数据，随后再切换激活表
+        createTable(table.id, { columnMeta: localMeta as any, data: localRows as any, columnOrder: localOrder });
         setActiveTableId(table.id);
-        show(`已创建并切换到后端新表（${importedTableName}），导入 ${nextData.length} 行，工作表：${sheetName}`, 'success');
+        show(`已创建并切换到后端新表（${importedTableName}），字段成功 ${createdFields.length}/${colInfo.length}，导入 ${nextData.length} 行，工作表：${sheetName}`, 'success');
         requestMeasure();
         notifySpaceChanged();
       } catch (e: any) {
-        console.error('导入并同步到后端失败，回退到本地示例表：', e);
-        const newTableId = `tbl-import-${Date.now()}`;
-        createTable(newTableId, {
-          columnMeta: nextMeta as any,
-          columnOrder: colInfo.map(c => c.id),
-          data: nextData as any,
-          columnVisibility: {},
-          sorting: [],
-        });
-        setActiveTableId(newTableId);
-        show(`后端同步失败，已创建本地示例表（${importedTableName}），导入 ${nextData.length} 行，工作表：${sheetName}`, 'warning');
+        console.error('导入并同步到后端失败：', e);
+        show(`后端同步失败：${e?.message || e}，请检查后端接口与返回结构`, 'error');
         requestMeasure();
       }
     })();
@@ -908,19 +955,18 @@ export default function App({ initialTableId }: { initialTableId?: string }) {
         <FieldDrawer
           open={fieldDrawerOpen}
           fieldId={editingFieldId}
+          initialName={editingFieldId ? columnMeta[editingFieldId!]?.name : ''}
+          initialType={editingFieldId ? (columnMeta[editingFieldId!]?.type as any) : 'text'}
+          initialDescription={editingFieldId ? columnMeta[editingFieldId!]?.description : ''}
+          initialOptions={editingFieldId ? (columnMeta[editingFieldId!]?.options as any) : undefined}
+          initialFormula={editingFieldId ? (columnMeta[editingFieldId!]?.formula as any) : undefined}
+          initialNumberFormat={editingFieldId ? (columnMeta[editingFieldId!]?.format as any) : undefined}
           availableFields={Object.entries(columnMeta).map(([id, meta]) => ({ id, name: meta.name, type: meta.type }))}
           onClose={closeFieldDrawer}
           onSave={async (payload) => {
             const { id, name, type, description, options, formula, format } = payload;
             const exists = !!columnMeta[id];
             if (exists) {
-              if (columnMeta[id].name !== name) {
-                fieldOps.renameField(id, name);
-              }
-              fieldOps.changeType(id, type as any, { options, formula, format });
-              if (description !== undefined) {
-                histSetColumnMeta(prev => ({ ...prev, [id]: { ...prev[id], description } }));
-              }
               try {
                 const { apiUpdateField } = await import('./services/fields');
                 const backendTypeMap: Record<string, 'TEXT' | 'NUMBER' | 'DATE' | 'ATTACHMENT' | 'FORMULA' | 'SINGLE_SELECT' | 'MULTI_SELECT' | undefined> = {
@@ -940,10 +986,18 @@ export default function App({ initialTableId }: { initialTableId?: string }) {
                 if (format) patch.format = format;
                 if (formula) patch.formula = formula;
                 await apiUpdateField(id, patch);
+                // 后端成功后再更新本地状态
+                if (columnMeta[id].name !== name) {
+                  fieldOps.renameField(id, name);
+                }
+                fieldOps.changeType(id, type as any, { options, formula, format });
+                if (description !== undefined) {
+                  histSetColumnMeta(prev => ({ ...prev, [id]: { ...prev[id], description } }));
+                }
                 show('字段已更新并持久化', 'success');
               } catch (err: any) {
-                console.warn('更新字段持久化失败：', err);
-                show(err?.message || '更新字段失败（已本地更新）', 'warning');
+                console.warn('更新字段失败：', err);
+                show(err?.message || '更新字段失败（未保存）', 'error');
               }
             } else {
               try {
@@ -960,13 +1014,7 @@ export default function App({ initialTableId }: { initialTableId?: string }) {
                 } as any;
                 const backendType = backendTypeMap[type];
                 if (!backendType) {
-                  // 暂不支持的类型：仅本地添加
-                  fieldOps.addField(id, { id, name, type });
-                  if (description !== undefined) {
-                    histSetColumnMeta(prev => ({ ...prev, [id]: { ...prev[id], description } }));
-                  }
-                  show('该字段类型暂未持久化，已仅本地添加', 'warning');
-                  closeFieldDrawer();
+                  show('该字段类型暂不支持后端持久化', 'error');
                   return;
                 }
                 const created = await trackSave(apiCreateField(activeTableId!, {
@@ -985,13 +1033,8 @@ export default function App({ initialTableId }: { initialTableId?: string }) {
                 }
                 show('字段已创建并持久化', 'success');
               } catch (err: any) {
-                console.warn('创建字段持久化失败：', err);
-                // 后端创建失败：退化为本地添加，避免打断使用
-                fieldOps.addField(id, { id, name, type });
-                if (description !== undefined) {
-                  histSetColumnMeta(prev => ({ ...prev, [id]: { ...prev[id], description } }));
-                }
-                show(err?.message || '创建字段失败（已本地添加）', 'warning');
+                console.warn('创建字段失败：', err);
+                show(err?.message || '创建字段失败（未保存）', 'error');
               }
             }
             closeFieldDrawer();
