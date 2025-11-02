@@ -7,6 +7,8 @@ export type AuthUser = {
   id: string;
   email?: string;
   name?: string;
+  role?: 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER';
+  isLocked?: boolean;
 };
 
 export function getToken(): string | null {

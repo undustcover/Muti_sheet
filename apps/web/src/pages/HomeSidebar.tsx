@@ -16,6 +16,8 @@ type Props = {
   onSelectPublicTask: (projectId: string, taskId: string) => void;
   onSelectPublicTable: (tableId: string) => void;
   onSelectFiles: () => void;
+  isAdmin?: boolean;
+  onSelectAdmin?: () => void;
 };
 
 const SectionTitle: React.FC<{ title: string }>
@@ -47,6 +49,8 @@ export default function HomeSidebar(props: Props) {
     onSelectPublicTask,
     onSelectPublicTable,
     onSelectFiles,
+    isAdmin,
+    onSelectAdmin,
   } = props;
 
   const [expandedMyProjects, setExpandedMyProjects] = useState<Record<string, boolean>>({});
@@ -164,6 +168,15 @@ export default function HomeSidebar(props: Props) {
       <div>
         <Row label={<span>文件管理</span>} onClick={() => onSelectFiles()} />
       </div>
+
+      {isAdmin && (
+        <>
+          <SectionTitle title="管理员" />
+          <div>
+            <Row label={<span>管理员中心</span>} onClick={() => onSelectAdmin && onSelectAdmin()} />
+          </div>
+        </>
+      )}
     </div>
   );
 }

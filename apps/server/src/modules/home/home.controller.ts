@@ -15,10 +15,10 @@ export class HomeController {
   @Get('recent-tables')
   async recentTables(@Req() req: any) {
     const userId = req.user?.userId as string;
-    void userId; // 未来可用于按用户过滤
 
-    // 取最近记录按 updatedAt 倒序，去重 tableId，再返回表信息
+    // 仅返回当前用户创建的表中的最近记录（按 updatedAt 倒序），去重 tableId
     const recentRecords = await this.prisma.record.findMany({
+      where: { table: { creatorId: userId } },
       orderBy: { updatedAt: 'desc' },
       take: 100,
       select: { id: true, tableId: true, updatedAt: true },
@@ -32,10 +32,9 @@ export class HomeController {
       }
       if (tableIds.length >= 20) break;
     }
+    // 若无记录则返回空列表，不再做兜底
     if (tableIds.length === 0) {
-      // 如果没有记录，按表 updatedAt 降序兜底返回若干表
-      const fallback = await this.prisma.table.findMany({ orderBy: { updatedAt: 'desc' }, take: 20 });
-      return fallback;
+      return [];
     }
     const tables = await this.prisma.table.findMany({ where: { id: { in: tableIds } } });
     // 保持与 tableIds 相同顺序

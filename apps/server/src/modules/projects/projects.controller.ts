@@ -1,4 +1,4 @@
-import { Body, Controller, Patch, Post, Req, UseGuards, Delete } from '@nestjs/common';
+import { Body, Controller, Patch, Post, Req, UseGuards, Delete, ForbiddenException } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
@@ -16,8 +16,7 @@ export class ProjectsController {
   @ApiOperation({ summary: '创建项目（支持设置匿名只读开关）' })
   @ApiBody({ type: CreateProjectDto })
   @ApiOkResponse({ description: '创建成功返回项目实体' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'OWNER')
+  @UseGuards(JwtAuthGuard)
   @Post()
   async create(@Body() dto: CreateProjectDto, @Req() req: any) {
     const ownerId = req.user?.userId;
@@ -45,11 +44,18 @@ export class ProjectsController {
 
   @ApiOperation({ summary: '删除项目（递归清理其任务、表、视图等）' })
   @ApiOkResponse({ description: '删除成功返回项目ID' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'OWNER')
+  @UseGuards(JwtAuthGuard)
   @Delete(':projectId')
   async remove(@Req() req: any) {
     const projectId = req.params.projectId as string;
+    const role = req.user?.role as 'ADMIN' | 'OWNER' | 'EDITOR' | 'VIEWER' | undefined;
+    const userId = req.user?.userId as string | undefined;
+    const proj = await this.prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true } });
+    const isAdmin = role === 'ADMIN';
+    const isOwner = !!userId && proj?.ownerId === userId;
+    if (!isAdmin && !isOwner) {
+      throw new ForbiddenException('Only ADMIN or project owner can delete project');
+    }
     await this.prisma.$transaction(async (tx) => {
       // 找到项目下任务
       const tasks = await tx.task.findMany({ where: { projectId }, select: { id: true } });

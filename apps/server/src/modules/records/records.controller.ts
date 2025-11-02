@@ -23,11 +23,22 @@ export class RecordsController {
   @ApiOperation({ summary: '新增记录' })
   @ApiBody({ type: CreateRecordDto })
   @ApiOkResponse({ description: '创建成功返回记录及数据' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'OWNER', 'EDITOR')
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(RecordDataFormatInterceptor)
   @Post('tables/:tableId/records')
-  async create(@Param('tableId') tableId: string, @Body() dto: CreateRecordDto) {
+  async create(@Param('tableId') tableId: string, @Body() dto: CreateRecordDto, @Req() req: any) {
+    const role = req.user?.role as 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER' | undefined;
+    const userId = req.user?.userId as string | undefined;
+    const table = await this.prisma.table.findUnique({
+      where: { id: tableId },
+      select: { creatorId: true, project: { select: { ownerId: true } } },
+    });
+    if (!table) throw new ForbiddenException('Table not found');
+    const isAdmin = role === 'ADMIN';
+    const isOwner = !!userId && (table.creatorId === userId || table.project?.ownerId === userId);
+    if (!isAdmin && !isOwner) {
+      throw new ForbiddenException('Only ADMIN or resource owner can create records');
+    }
     return this.prisma.$transaction(async (tx) => {
       const record = await tx.record.create({ data: { tableId } });
       const data = dto.data || {};
@@ -150,14 +161,21 @@ export class RecordsController {
   @ApiOperation({ summary: '局部更新记录' })
   @ApiBody({ type: UpdateRecordDto })
   @ApiOkResponse({ description: '更新成功返回记录ID' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'OWNER', 'EDITOR')
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(RecordDataFormatInterceptor)
   @Patch('records/:recordId')
-  async update(@Param('recordId') recordId: string, @Body() dto: UpdateRecordDto) {
+  async update(@Param('recordId') recordId: string, @Body() dto: UpdateRecordDto, @Req() req: any) {
     return this.prisma.$transaction(async (tx) => {
       const rec = await tx.record.findUnique({ where: { id: recordId }, select: { tableId: true } });
       if (!rec) throw new ForbiddenException('Record not found');
+      const role = req.user?.role as 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER' | undefined;
+      const userId = req.user?.userId as string | undefined;
+      const table = await tx.table.findUnique({ where: { id: rec.tableId }, select: { creatorId: true, project: { select: { ownerId: true } } } });
+      const isAdmin = role === 'ADMIN';
+      const isOwner = !!userId && (table?.creatorId === userId || table?.project?.ownerId === userId);
+      if (!isAdmin && !isOwner) {
+        throw new ForbiddenException('Only ADMIN or resource owner can update records');
+      }
       const fields = await tx.field.findMany({ where: { tableId: rec.tableId }, select: { id: true, type: true } });
       const fieldMap = new Map(fields.map((f) => [f.id, f.type]));
       const entries = Object.entries(dto.data || {}).filter(([fid]) => fieldMap.has(fid));
@@ -182,11 +200,20 @@ export class RecordsController {
 
   @ApiOperation({ summary: '删除记录' })
   @ApiOkResponse({ description: '删除成功返回记录ID' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'OWNER', 'EDITOR')
+  @UseGuards(JwtAuthGuard)
   @Delete('records/:recordId')
-  async remove(@Param('recordId') recordId: string) {
+  async remove(@Param('recordId') recordId: string, @Req() req: any) {
     return this.prisma.$transaction(async (tx) => {
+      const rec = await tx.record.findUnique({ where: { id: recordId }, select: { tableId: true } });
+      if (!rec) throw new ForbiddenException('Record not found');
+      const role = req.user?.role as 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER' | undefined;
+      const userId = req.user?.userId as string | undefined;
+      const table = await tx.table.findUnique({ where: { id: rec.tableId }, select: { creatorId: true, project: { select: { ownerId: true } } } });
+      const isAdmin = role === 'ADMIN';
+      const isOwner = !!userId && (table?.creatorId === userId || table?.project?.ownerId === userId);
+      if (!isAdmin && !isOwner) {
+        throw new ForbiddenException('Only ADMIN or resource owner can delete records');
+      }
       await tx.recordsData.deleteMany({ where: { recordId } });
       await tx.record.delete({ where: { id: recordId } });
       return { id: recordId };
@@ -196,12 +223,20 @@ export class RecordsController {
   @ApiOperation({ summary: '批量新增/更新/删除（事务）' })
   @ApiBody({ type: BatchRecordsDto })
   @ApiOkResponse({ description: '批量操作结果' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'OWNER', 'EDITOR')
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(RecordDataFormatInterceptor)
   @Post('tables/:tableId/records:batch')
-  async batch(@Param('tableId') tableId: string, @Body() dto: BatchRecordsDto) {
+  async batch(@Param('tableId') tableId: string, @Body() dto: BatchRecordsDto, @Req() req: any) {
     return this.prisma.$transaction(async (tx) => {
+      const role = req.user?.role as 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER' | undefined;
+      const userId = req.user?.userId as string | undefined;
+      const table = await tx.table.findUnique({ where: { id: tableId }, select: { creatorId: true, project: { select: { ownerId: true } } } });
+      if (!table) throw new ForbiddenException('Table not found');
+      const isAdmin = role === 'ADMIN';
+      const isOwner = !!userId && (table.creatorId === userId || table.project?.ownerId === userId);
+      if (!isAdmin && !isOwner) {
+        throw new ForbiddenException('Only ADMIN or resource owner can batch modify records');
+      }
       const fields = await tx.field.findMany({ where: { tableId }, select: { id: true, type: true } });
       const fieldMap = new Map(fields.map((f) => [f.id, f.type]));
       const result = { created: [] as string[], updated: [] as string[], deleted: [] as string[] };

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { API_BASE, authHeaders } from '../services/auth';
+import { API_BASE, authHeaders, logout } from '../services/auth';
+import { navigateTo } from '../router';
 
 type UserItem = { id: string; email: string; name: string; role: 'OWNER'|'ADMIN'|'EDITOR'|'VIEWER'; isLocked: boolean; createdAt: string };
 type Setting = { id: string; inviteOnlyRegistration: boolean };
@@ -12,16 +13,35 @@ export default function AdminPage() {
   const [newInviteName, setNewInviteName] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  // 统一处理请求：校验状态码，捕获401并友好提示
+  const ensureOk = async (resp: Response, fallbackMsg: string) => {
+    if (!resp.ok) {
+      const text = await resp.text();
+      if (resp.status === 401) {
+        await logout();
+        navigateTo('/');
+        throw new Error('未登录或登录已过期，已为您跳转到登录页面');
+      }
+      throw new Error(text || `${fallbackMsg}(${resp.status})`);
+    }
+  };
+
+  const fetchJson = async (url: string, fallbackMsg: string) => {
+    const resp = await fetch(url, { headers: { 'Content-Type': 'application/json', ...authHeaders() } });
+    await ensureOk(resp, fallbackMsg);
+    return resp.json();
+  };
+
   const loadAll = async () => {
     try {
       const [s, us, ins] = await Promise.all([
-        fetch(`${API_BASE}/admin/settings`, { headers: { 'Content-Type': 'application/json', ...authHeaders() } }).then(r => r.json()),
-        fetch(`${API_BASE}/admin/users`, { headers: { 'Content-Type': 'application/json', ...authHeaders() } }).then(r => r.json()),
-        fetch(`${API_BASE}/admin/invites`, { headers: { 'Content-Type': 'application/json', ...authHeaders() } }).then(r => r.json()),
+        fetchJson(`${API_BASE}/admin/settings`, '获取系统设置失败'),
+        fetchJson(`${API_BASE}/admin/users`, '获取用户列表失败'),
+        fetchJson(`${API_BASE}/admin/invites`, '获取邀请列表失败'),
       ]);
-      setSetting(s);
-      setUsers(us);
-      setInvites(ins);
+      setSetting(s && typeof s === 'object' ? s : null);
+      setUsers(Array.isArray(us) ? us : []);
+      setInvites(Array.isArray(ins) ? ins : []);
     } catch (err: any) {
       setError(err?.message || '管理员数据加载失败');
     }
@@ -112,7 +132,7 @@ export default function AdminPage() {
                     <option value="VIEWER">VIEWER</option>
                     <option value="EDITOR">EDITOR</option>
                     <option value="ADMIN">ADMIN</option>
-                    <option value="OWNER">OWNER</option>
+                    <option value="OWNER">Super Admin</option>
                   </select>
                 </td>
                 <td>

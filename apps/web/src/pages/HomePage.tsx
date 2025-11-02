@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useToast } from '../components/Toast';
 import HomeSidebar from './HomeSidebar';
 import { navigateTo } from '../router';
+import { getUser } from '../services/auth';
 
 type Props = {
   onOpenTable: (tableId?: string) => void;
@@ -40,8 +41,8 @@ export default function HomePage({ onOpenTable }: Props) {
         const rts = recent.map(it => ({ id: it.id, name: it.name, description: it.description }));
         const mySpace = my.map(p => ({ id: p.id, name: p.name, tasks: p.tasks || [], tables: p.tables || [] }));
         const pubSpace = pub.map(p => ({ id: p.id, name: p.name, tasks: p.tasks || [], tables: p.tables || [] }));
-        // 若为空，提供与表格初始化对齐的默认示例
-        const defaultRecent = rts.length > 0 ? rts : [{ id: 'tbl-1', name: '数据表1', description: '示例数据表' }];
+        // 若为空则保持为空，不再提供示例兜底
+        const defaultRecent = rts;
         const defaultMy = mySpace.length > 0 ? mySpace : [{ id: 'proj-a', name: '项目A', tables: [{ id: 'tbl-1', name: '数据表1' }] }];
         const defaultPub = pubSpace.length > 0 ? pubSpace : [];
         setRecentTables(defaultRecent);
@@ -186,6 +187,8 @@ export default function HomePage({ onOpenTable }: Props) {
   };
 
   const tables = computeTablesForSelection();
+  const user = getUser();
+  const isAdmin = !!(user && user.role === 'ADMIN');
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#f7f7f9' }}>
@@ -200,6 +203,8 @@ export default function HomePage({ onOpenTable }: Props) {
         onSelectPublicTask={(projectId, taskId) => setSelection({ type: 'public-task', projectId, taskId })}
         onSelectPublicTable={(tableId) => onOpenTable(tableId)}
         onSelectFiles={() => setSelection({ type: 'files' })}
+        isAdmin={isAdmin}
+        onSelectAdmin={() => navigateTo('/admin')}
       />
       <div style={{ flex: 1 }}>
         <div style={{ padding: 16 }}>

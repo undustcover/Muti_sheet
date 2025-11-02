@@ -39,4 +39,10 @@ export class PermissionService {
 
     return { visible, readOnlyVisible, writable };
   }
+
+  // 扩展：带资源上下文的权限解析；资源拥有者具备更高权限（等同 ADMIN）
+  resolveFieldPermissionWithContext(role: RoleType, isResourceOwner: boolean, permissionJson?: FieldPermissionJson | null): FieldPermissionResult {
+    const effectiveRole: RoleType = isResourceOwner ? 'ADMIN' : role;
+    return this.resolveFieldPermission(effectiveRole, permissionJson);
+  }
 }

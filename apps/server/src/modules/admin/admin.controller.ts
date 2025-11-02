@@ -18,7 +18,7 @@ export class AdminController {
   @ApiOperation({ summary: '获取系统设置（注册模式）' })
   @ApiOkResponse({ description: '返回当前注册模式设置' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'OWNER')
+  @Roles('ADMIN')
   @Get('settings')
   async getSettings() {
     let setting = await this.prisma.systemSetting.findFirst();
@@ -31,7 +31,7 @@ export class AdminController {
   @ApiOperation({ summary: '更新系统设置（注册模式）' })
   @ApiOkResponse({ description: '更新成功返回设置' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'OWNER')
+  @Roles('ADMIN')
   @Patch('settings')
   async updateSettings(@Body() dto: { inviteOnlyRegistration?: boolean }) {
     let setting = await this.prisma.systemSetting.findFirst();
@@ -47,7 +47,7 @@ export class AdminController {
   @ApiBody({ type: CreateInviteDto })
   @ApiOkResponse({ description: '返回邀请实体与令牌' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'OWNER')
+  @Roles('ADMIN')
   @Post('invites')
   async createInvite(@Body() dto: CreateInviteDto, req?: any) {
     const name = dto.name.trim();
@@ -65,7 +65,7 @@ export class AdminController {
   @ApiOperation({ summary: '邀请列表' })
   @ApiOkResponse({ description: '返回全部邀请（含已使用）' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'OWNER')
+  @Roles('ADMIN')
   @Get('invites')
   async listInvites() {
     return this.prisma.invite.findMany({ orderBy: { createdAt: 'desc' } });
@@ -74,7 +74,7 @@ export class AdminController {
   @ApiOperation({ summary: '用户列表（管理员）' })
   @ApiOkResponse({ description: '返回全部用户' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'OWNER')
+  @Roles('ADMIN')
   @Get('users')
   async listUsers() {
     return this.prisma.user.findMany({ select: { id: true, email: true, name: true, role: true, isLocked: true, createdAt: true }, orderBy: { createdAt: 'desc' } });
@@ -83,7 +83,7 @@ export class AdminController {
   @ApiOperation({ summary: '更新用户角色/锁定' })
   @ApiOkResponse({ description: '返回更新后的用户' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'OWNER')
+  @Roles('ADMIN')
   @Patch('users/:userId')
   async updateUser(@Param('userId') userId: string, @Body() dto: { role?: 'OWNER'|'ADMIN'|'EDITOR'|'VIEWER'; isLocked?: boolean }) {
     const data: any = {};
@@ -95,7 +95,7 @@ export class AdminController {
   @ApiOperation({ summary: '删除用户' })
   @ApiOkResponse({ description: '删除成功返回ID' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'OWNER')
+  @Roles('ADMIN')
   @Post('users/:userId:delete')
   async deleteUser(@Param('userId') userId: string) {
     await this.prisma.user.delete({ where: { id: userId } });
